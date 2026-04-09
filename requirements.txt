@@ -26,3 +26,7 @@ tensorboard>=2.11.0
 
 # Image generation (install the one you need)
 # replicate>=0.25.0       # for Replicate API
+
+# service_analytics (video-to-service-data pipeline)
+# pandas>=2.0.0           # needed for analyze stage
+# python-dotenv>=1.0.0    # optional, for loading OPENROUTER_API_KEY from .env
