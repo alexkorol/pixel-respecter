@@ -1,15 +1,16 @@
 # Pixel Perfecter
 
-Pixel Perfecter is a Python-first toolkit for turning diffusion-flavoured "pixel art" into clean, grid-aligned sprites. The codebase now revolves around a reusable reconstruction module, a Qt GUI for interactive tuning, and a batch CLI that mirrors the GUI settings for large runs. Inspiration comes from unfake.js (rich controls, great UX) and Proper Pixel Art (clear documentation, math-first analysis); the goal is to fuse clarity with interactivity in one repository.
+Pixel Perfecter turns degraded "pixel art" — AI-generated renders, scaled screenshots, anti-aliased exports — into clean, grid-aligned sprites at their true 1× resolution. Around that core sits an ML data pipeline that pairs cleaned sprites with generated high-resolution counterparts and packages them for LoRA training (the model learns to **pixelize**: high-res in, pixel art out).
 
 ---
 
 ## Components at a Glance
 
-- **Core pipeline (`pixel_perfecter/reconstructor.py`)** – Estimates pixel grids, reconstructs colour cells, and emits diagnostics that separate halo noise from core differences.
-- **Interactive GUI (`python -m pixel_perfecter.gui`)** – PySide6 application with drag-and-drop import, live previews, optional ML hints, and structured feedback logging.
+- **Core reconstructor (`pixel_perfecter/`)** – Detects the pixel grid (even non-integer upscales), collapses each cell to its dominant color, and emits halo-aware diagnostics.
+- **Interactive GUI (`python -m pixel_perfecter.gui`)** – PySide6 app with drag-and-drop import, live previews, and structured feedback logging.
 - **Batch CLI (`python -m pixel_perfecter.cli`)** – Processes files or directories, writes reconstructions plus overlays, and records metrics to CSV.
-- **Optional ML helpers (`ml/`)** – Lightweight PyTorch models that suggest grid parameters; both GUI and CLI auto-detect their availability.
+- **Meta pipeline (`pipeline/`)** – extract → clean → tag → caption → prompts → generate → package → train. Includes DCSS tile datamining and a curation gallery.
+- **LoRA training (`training/`)** – Fine-tuning infrastructure for the pixelize model.
 
 ---
 
@@ -20,24 +21,38 @@ python -m venv .venv
 .venv\Scripts\activate           # Windows
 # or: source .venv/bin/activate  # macOS / Linux
 pip install -r requirements.txt
+pip install python-dotenv openai  # for the OpenRouter pipeline backends
 ```
 
-The `input/` and `output/` folders are git-ignored so you can freely drop working images and generated results there.
+API keys for the pipeline go in `.env` at the project root (`OPENROUTER_API_KEY=sk-or-...`). The `input/` and `output/` folders are git-ignored working space.
+
+---
+
+## How Reconstruction Works
+
+1. **Candidate detection** — four independent detectors propose cell sizes:
+   - *Exact NN check*: largest scale where every block is perfectly uniform
+   - *Hough mesh*: Canny → morphological closing → probabilistic Hough → line clustering → trimmed-median pitch (the proper-pixel-art chain)
+   - *Autocorrelation* of boundary-mass projections
+   - *Phase-fold sweep*: cheap alignment score for every plausible size
+2. **Unified scoring** — every candidate `(cell size, offset)` is ranked by one metric: inter-cell contrast / √(intra-cell variance). It peaks at the true grid and resolves harmonics (5 vs 10 px) toward the native resolution. No detector is trusted blindly; the best explanation of the image wins.
+3. **Mesh mode** — when the pitch is fractional (e.g. a 32-px sprite upscaled to fill 496 px gives alternating 15/16-px cells), no rigid grid fits. The pitch is measured to sub-pixel precision from autocorrelation peaks, grid lines snap to boundary-mass peaks, and reconstruction uses the variable mesh directly.
+4. **Downsampling** — the image is mapped to palette-label space (exact colors when few, quantized otherwise — never dithered), then each cell takes its modal color via a single vectorized bincount. Cell interiors are margin-trimmed so anti-aliased borders don't vote.
+5. **Diagnostics** — reconstructions are compared against the source with halo/core separation, tolerant diffs for AI content, and per-image warnings.
+
+Everything is vectorized; typical sprites reconstruct in well under a second (the previous implementation took 8–28 s and mis-detected harmonics and fractional pitches).
 
 ---
 
 ## Batch CLI
 
-The batch interface lives under `pixel_perfecter.cli` and wraps the reconstruction pipeline with sensible defaults.
-
 ```bash
 # Basic run on every PNG / JPEG / BMP / WebP in ./input
 python -m pixel_perfecter.cli input --output-dir output
 
-# Apply ML suggestions, walk directories recursively, and split overlays
+# Walk directories recursively and split overlays
 python -m pixel_perfecter.cli input extra/*.png \
     --mode global \
-    --ml \
     --recursive \
     --overlay-dir output/overlays
 ```
@@ -49,51 +64,59 @@ python -m pixel_perfecter.cli input extra/*.png \
 | `inputs...` | Files or directories to process. Directories are scanned (optionally recursively) for supported image types. |
 | `-o, --output-dir PATH` | Destination for reconstructed sprites (default: `./output`). |
 | `--overlay-dir PATH` | Optional directory for validation overlays (defaults to the output dir). |
-| `--mode {global,adaptive}` | Choose the grid strategy. Adaptive mode fits per-region grids when a single lattice fails. |
-| `--overlay-mode {combined,raw,halo_suppressed,core_only}` | Select which diagnostic composite to export. |
+| `--mode {global,adaptive}` | Grid strategy. Adaptive fits per-region grids when a single lattice fails. |
+| `--overlay-mode {combined,raw,halo_suppressed,core_only}` | Diagnostic composite to export. |
 | `--skip-overlays` | Do not write overlay images. |
 | `--ml` | Enable ML suggestions if `ml/` checkpoints are present (ignored in adaptive mode). |
-| `--debug` | Emit verbose logging from the reconstruction pipeline. |
+| `--debug` | Verbose logging from the reconstruction pipeline. |
 | `--grid-debug` / `--grid-debug-dir PATH` | Export grid detection plots (defaults to `output/grid_debug/`). |
 | `--recursive` | Walk directory inputs recursively. |
 | `--metrics-path PATH` / `--no-metrics` | Control where the metrics CSV lands (defaults to `output/metrics.csv`). |
 
-Each run produces:
-
-- `<output>/<name>_reconstructed.png` – the snapped sprite.
-- `<output>/<name>_validation.png` (unless skipped) – the chosen overlay variant highlighting halo versus core differences.
-- `metrics.csv` – per-image statistics (`percent_diff_core`, `percent_diff_halo`, `grid_ratio`, warnings, ML usage, output paths).
-- `grid_debug/` (when enabled) – edge projections and autocorrelation plots captured during grid inference.
+Each run produces `<name>_reconstructed.png` (the 1× sprite), `<name>_validation.png` (halo vs core diff overlay), and `metrics.csv`.
 
 ---
 
 ## GUI
 
-Launch the PySide6 interface with:
-
 ```bash
 python -m pixel_perfecter.gui
 ```
 
-Highlights:
-
-- Drag-and-drop loading, live recomputation when cell size or offsets change, and instant previews of multiple overlay styles.
-- Optional "Adaptive per-region grid" mode for locally warped assets.
-- Halo-aware metrics (core / halo / outside) shown alongside the preview, mirroring the CLI CSV fields.
-- ML suggestions (when `ml/` checkpoints exist) displayed in a sidebar; the GUI gracefully degrades if the models are absent.
-- Feedback logging to `notes/feedback_log.csv`, making it easy to curate success and failure cases while testing.
+Drag-and-drop loading, live recomputation when cell size or offsets change, multiple overlay styles, optional adaptive per-region mode, and feedback logging to `notes/feedback_log.csv`.
 
 ---
 
-## Pipeline Overview
+## ML Pipeline
 
-1. **Pre-processing** – optional alpha binarisation and halo-aware edge detection.
-2. **Grid detection** – autocorrelation and Sobel projections estimate dominant cell sizes and offsets; adaptive mode splits the image into regions when confidence is low.
-3. **Cell reconstruction** – each grid cell collapses to a modal colour taken from its interior, limiting halo contamination.
-4. **Diagnostics** – reconstructions are upscaled, overlays are rendered in several variants, and difference statistics (core / halo / outside) are recorded for manual review.
-5. **Optional refinement** – ML suggestions (if enabled) evaluate alternate grid parameters and keep the best-scoring candidate.
+```bash
+# Full pipeline run (see --help for stage selection)
+python -m pipeline.cli run --help
 
-The CLI and GUI both use this pipeline, so switching between interactive and automated workflows is lossless.
+# DCSS tile curation (datamined game descriptions + curation gallery)
+python -m pipeline.crawl_descriptions --fetch -o data/dcss-curated --categories item mon dngn
+
+# Batch caption sprites via OpenRouter
+python scripts/batch_caption_remaining.py
+```
+
+Conventions that matter:
+
+- Pixel art is the **target** (ground truth); generated high-res images are the **input**. The trained model pixelizes.
+- Manifest/JSON paths use forward slashes (cross-platform).
+- The OpenRouter generator speaks raw `urllib` because the OpenAI SDK strips the `images` field from responses.
+- Never run batch API calls on uncurated data — visually QC first.
+
+---
+
+## Running Tests & Benchmarks
+
+```bash
+python -m pytest tests/ -x -q
+python benchmarks/bench_reconstructor.py
+```
+
+The test suite includes ground-truth round-trips: clean integer upscales must reconstruct **pixel-exact**, fractional upscales (15.5 px, 9.7 px pitches) must trigger mesh mode and still match exactly, and noisy/blurred AI-style art must land within tolerance.
 
 ---
 
@@ -101,25 +124,38 @@ The CLI and GUI both use this pipeline, so switching between interactive and aut
 
 ```
 pixel-perfecter/
-├─ pixel_perfecter/        # Python package: reconstructor, GUI launcher, CLI
-├─ src/                    # Legacy shims kept for backward compatibility
-├─ ml/                     # Optional ML helpers (dataset prep, inference, checkpoints)
-├─ input/                  # Drop source images here (not tracked)
-├─ output/                 # Default destination for reconstructions (not tracked)
-├─ notes/                  # Design docs, logbooks, curated examples
-├─ archive/                # Earlier experiments and reference scripts
-├─ requirements.txt        # Runtime dependencies
-└─ README.md               # Project overview
+├─ pixel_perfecter/        # Core package
+│  ├─ reconstructor.py     #   detection orchestrator + diagnostics (public API)
+│  ├─ grid.py              #   vectorized rigid-grid engine (labels, scoring, modal downsample)
+│  ├─ mesh.py              #   variable-mesh detection for non-integer upscales
+│  ├─ colors.py            #   quantization, alpha handling, background transparency
+│  ├─ cli.py / gui*.py     #   batch CLI and PySide6 GUI
+├─ pipeline/               # Meta pipeline: extract → clean → … → train
+├─ training/               # LoRA fine-tuning infrastructure
+├─ scripts/                # Utility scripts (batch captioning, etc.)
+├─ tests/                  # pytest suite (93 tests)
+├─ benchmarks/             # Reconstruction speed/accuracy benchmarks
+├─ ml/                     # Optional grid-parameter suggestion models
+├─ input/ · output/ · data/  # Working dirs (git-ignored)
+└─ notes/ · archive/       # Design docs and earlier experiments
 ```
 
 ---
 
-## Roadmap
+## Acknowledgements
 
-- Harden CLI smoke tests with additional fixtures and edge-case assertions.
-- Migrate remaining development scripts from `src/` into the `pixel_perfecter` namespace or archive them.
-- Document algorithmic trade-offs (halo handling, adaptive grids) in `notes/` with side-by-side visuals.
-- Package optional ML checkpoints for easier distribution and surface confidence metrics more prominently in the GUI and CLI.
+The reconstruction core owes a great deal to **Kenneth J. Allen**'s
+[proper-pixel-art](https://github.com/KennethJAllen/proper-pixel-art) (MIT):
+the Hough-based mesh detection chain (edge closing → line clustering →
+trimmed-median pitch → mesh completion), the variable-mesh representation
+that handles non-integer upscales, quantize-before-downsample color
+handling, transparency-majority alpha cells, and offset-binned dominant
+colors all follow his design. His write-ups at
+[kennethallenmath.com](https://www.kennethallenmath.com/) are the clearest
+treatment of this problem we've found — go read them.
+
+Additional inspiration from [unfake.js](https://github.com/jenissimo/unfake.js)
+(rich controls and UX for the same problem space).
 
 ---
 

@@ -14,6 +14,8 @@ import cv2
 import numpy as np
 from PIL import Image
 
+from pixel_perfecter import colors as color_ops
+from pixel_perfecter import grid as grid_ops
 from pixel_perfecter.reconstructor import (
     PixelArtReconstructor,
     _compute_intra_cell_variance,
@@ -68,7 +70,6 @@ def _detect_nearest_neighbor_scale(img: np.ndarray) -> int:
     gray = cv2.cvtColor(img[:, :, :3], cv2.COLOR_RGB2GRAY)
 
     # test LARGEST scale factors first — we want the true native resolution
-    best_scale = 1
     for scale in [16, 12, 10, 8, 6, 5, 4, 3, 2]:
         if h % scale != 0 or w % scale != 0:
             continue
@@ -76,40 +77,24 @@ def _detect_nearest_neighbor_scale(img: np.ndarray) -> int:
         if h // scale < 4 or w // scale < 4:
             continue
 
-        # sample a section and check if every scale x scale block is uniform
-        sample_h = min(h, 64 * scale)
-        sample_w = min(w, 64 * scale)
-        sample = gray[:sample_h, :sample_w]
+        # sample a section and check that scale x scale blocks are uniform
+        sample_h = min(h, 64 * scale) // scale * scale
+        sample_w = min(w, 64 * scale) // scale * scale
+        blocks = gray[:sample_h, :sample_w].reshape(
+            sample_h // scale, scale, sample_w // scale, scale
+        )
+        ptp = blocks.max(axis=(1, 3)).astype(np.int16) - blocks.min(axis=(1, 3))
 
-        strict_blocks = 0  # ptp = 0 (perfectly uniform)
-        loose_blocks = 0   # ptp <= 2 (near-uniform)
-        total_blocks = 0
-
-        for by in range(0, sample_h - scale + 1, scale):
-            for bx in range(0, sample_w - scale + 1, scale):
-                block = sample[by:by + scale, bx:bx + scale]
-                total_blocks += 1
-                ptp = np.ptp(block)
-                if ptp == 0:
-                    strict_blocks += 1
-                    loose_blocks += 1
-                elif ptp <= 2:
-                    loose_blocks += 1
-
-        if total_blocks == 0:
-            continue
-
-        strict_ratio = strict_blocks / total_blocks
-        loose_ratio = loose_blocks / total_blocks
+        strict_ratio = float(np.mean(ptp == 0))
+        loose_ratio = float(np.mean(ptp <= 2))
 
         # True NN upscaling: most blocks are exactly identical
         # AI-generated: smooth gradients make blocks look near-uniform but
         # NOT exactly identical.
         if strict_ratio >= 0.60 and loose_ratio >= 0.90:
-            best_scale = scale
-            break  # largest matching scale is the true upscale factor
+            return scale  # largest matching scale is the true upscale factor
 
-    return best_scale
+    return 1
 
 
 def _downscale_nn(img: np.ndarray, scale: int) -> np.ndarray:
@@ -130,38 +115,10 @@ def _grid_quality_score(img: np.ndarray, cell_size: int, offset: Tuple[int, int]
       differ from neighbors (high inter)
     - At too-small sizes: both inter and intra are low (subdividing one pixel)
     - At too-large sizes: intra is high (spanning multiple pixels)
+
+    Delegates to the vectorized implementation in pixel_perfecter.grid.
     """
-    h, w = img.shape[:2]
-    ox, oy = offset
-
-    grid_h = (h - oy) // cell_size
-    grid_w = (w - ox) // cell_size
-    if grid_h < 2 or grid_w < 2:
-        return 0.0
-
-    # Compute mean color and variance per cell using vectorized ops
-    means = np.zeros((grid_h, grid_w, 3), dtype=np.float32)
-    total_intra_var = 0.0
-
-    for gy in range(grid_h):
-        for gx in range(grid_w):
-            y0 = oy + gy * cell_size
-            x0 = ox + gx * cell_size
-            cell = img[y0:y0 + cell_size, x0:x0 + cell_size, :3].astype(np.float32)
-            flat = cell.reshape(-1, 3)
-            means[gy, gx] = np.mean(flat, axis=0)
-            total_intra_var += np.mean(np.var(flat, axis=0))
-
-    mean_intra_var = total_intra_var / (grid_h * grid_w)
-
-    # Inter-cell contrast: mean L1 difference between adjacent cells
-    h_diff = np.sum(np.abs(means[:, :-1] - means[:, 1:]), axis=-1)
-    v_diff = np.sum(np.abs(means[:-1, :] - means[1:, :]), axis=-1)
-    mean_inter_diff = np.mean(np.concatenate([h_diff.ravel(), v_diff.ravel()]))
-
-    if mean_intra_var < 0.1:
-        return mean_inter_diff * 100.0  # near-perfect grid
-    return float(mean_inter_diff / (mean_intra_var ** 0.5))
+    return grid_ops.grid_quality_score(img, cell_size, offset)
 
 
 def _pick_best_cell_size(
@@ -217,19 +174,13 @@ def _extract_alpha_1x(
     grid_h: int,
     grid_w: int,
 ) -> np.ndarray:
-    """Extract 1x alpha channel by thresholding cell averages."""
-    oy, ox = offset[1], offset[0]
-    alpha_1x = np.zeros((grid_h, grid_w), dtype=np.uint8)
-    for gy in range(grid_h):
-        for gx in range(grid_w):
-            cy = oy + gy * cell_size
-            cx = ox + gx * cell_size
-            cell_alpha = alpha_channel[
-                cy:min(cy + cell_size, alpha_channel.shape[0]),
-                cx:min(cx + cell_size, alpha_channel.shape[1]),
-            ]
-            if cell_alpha.size > 0:
-                alpha_1x[gy, gx] = 255 if np.mean(cell_alpha) > 127 else 0
+    """Extract 1x alpha by per-cell transparency majority (vectorized)."""
+    cells = color_ops.cell_alpha_rigid(alpha_channel, cell_size, offset)
+    # Match the reconstruction's grid exactly; missing edge cells are opaque.
+    alpha_1x = np.full((grid_h, grid_w), 255, dtype=np.uint8)
+    ch = min(grid_h, cells.shape[0])
+    cw = min(grid_w, cells.shape[1])
+    alpha_1x[:ch, :cw] = cells[:ch, :cw]
     return alpha_1x
 
 
@@ -270,75 +221,42 @@ def clean_sprite(
         logger.debug("Sprite too small: %dx%d", w, h)
         return None
 
-    # Step 1: detect if this is already an NN-upscaled sprite
-    nn_scale = _detect_nearest_neighbor_scale(rgb)
-    if nn_scale > 1:
-        logger.info("Detected %dx NN upscale in %s", nn_scale, source_path)
-
-    # FAST PATH: if NN upscale detected with high confidence, the 1x version
-    # is just a direct downsample — no reconstruction needed.
+    # Step 1: FAST PATH for exact nearest-neighbor upscales. The detector
+    # requires every block to be perfectly uniform, so the direct downsample
+    # is the true 1x art by construction — no reconstruction needed. Fuzzy
+    # near-NN images (AI renders, non-integer upscales) fall through to the
+    # full reconstructor, which handles them correctly.
+    nn_scale = grid_ops.detect_nn_scale(rgb)
     if nn_scale >= 2:
+        logger.info("Exact %dx NN upscale in %s, using fast path",
+                    nn_scale, source_path)
         image_1x = _downscale_nn(rgb, nn_scale)
-        alpha_1x = None
         if alpha_channel is not None:
-            alpha_1x_raw = _downscale_nn(alpha_channel, nn_scale)
-            # threshold: >50% = opaque
-            alpha_1x = np.where(alpha_1x_raw > 127, 255, 0).astype(np.uint8)
+            # Alpha may be fuzzier than color; use per-cell majority.
+            alpha_1x = color_ops.cell_alpha_rigid(alpha_channel, nn_scale, (0, 0))
+            image_1x = np.dstack([image_1x, alpha_1x])
 
-        # verify the downscale is clean (reconstruct and compare)
-        upcheck = np.repeat(np.repeat(image_1x, nn_scale, axis=0),
-                            nn_scale, axis=1)
-        h_cmp = min(rgb.shape[0], upcheck.shape[0])
-        w_cmp = min(rgb.shape[1], upcheck.shape[1])
-        diff_pixels = np.any(
-            rgb[:h_cmp, :w_cmp] != upcheck[:h_cmp, :w_cmp], axis=2
+        h1, w1 = image_1x.shape[:2]
+        up_scale = max(1, upscale_target // max(h1, w1))
+        image_up = cv2.resize(image_1x, (w1 * up_scale, h1 * up_scale),
+                              interpolation=cv2.INTER_NEAREST)
+
+        return CleanedAsset(
+            image_1x=image_1x,
+            image_upscaled=image_up,
+            cell_size=nn_scale,
+            offset=(0, 0),
+            metrics={"clean_ratio": 1.0, "method": "nn_fast_path",
+                      "percent_diff_core": 0.0,
+                      "intra_cell_variance": 0.0},
+            source_path=source_path,
+            warnings=[],
         )
-        clean_ratio = 1.0 - (np.sum(diff_pixels) / diff_pixels.size)
-
-        if clean_ratio > 0.92:
-            # clean NN upscale — skip full reconstruction
-            logger.info("Clean NN downscale (%.1f%% match), using fast path",
-                        clean_ratio * 100)
-            if alpha_1x is not None:
-                image_1x = np.dstack([image_1x, alpha_1x])
-
-            h1, w1 = image_1x.shape[:2]
-            up_scale = max(1, upscale_target // max(h1, w1))
-            image_up = cv2.resize(image_1x, (w1 * up_scale, h1 * up_scale),
-                                  interpolation=cv2.INTER_NEAREST)
-
-            return CleanedAsset(
-                image_1x=image_1x,
-                image_upscaled=image_up,
-                cell_size=nn_scale,
-                offset=(0, 0),
-                metrics={"clean_ratio": clean_ratio, "method": "nn_fast_path",
-                          "percent_diff_core": (1 - clean_ratio) * 100,
-                          "intra_cell_variance": 0.0},
-                source_path=source_path,
-                warnings=[],
-            )
-
-        if clean_ratio > 0.80:
-            # mostly clean NN — downscale and try reconstruction on smaller image
-            rgb = _downscale_nn(rgb, nn_scale)
-            if alpha_channel is not None:
-                alpha_channel = _downscale_nn(alpha_channel, nn_scale)
-            h, w = rgb.shape[:2]
-        else:
-            # NN detection was a false positive (AI gradients fooled it).
-            # Reset nn_scale and process original image.
-            logger.info(
-                "NN scale %d rejected (clean_ratio=%.1f%%), processing original for %s",
-                nn_scale, clean_ratio * 100, source_path,
-            )
-            nn_scale = 1
     # end NN detection
 
-    # Step 2: run pixel-perfecter reconstruction
-    bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
+    # Step 2: run pixel-perfecter reconstruction (expects RGB)
     try:
-        rec = PixelArtReconstructor(image=bgr, debug=False)
+        rec = PixelArtReconstructor(image=rgb, debug=False)
         rec.use_hough = use_hough
         result = rec.run(mode="global")
     except Exception as e:
@@ -347,13 +265,19 @@ def clean_sprite(
 
     detected_size = rec.cell_size
     detected_offset = rec.offset if rec.offset else (0, 0)
+    # Mesh reconstructions use variable cell widths (non-integer upscales);
+    # rigid-grid refinement and fallbacks below do not apply to them.
+    is_mesh = bool(rec.last_metrics and rec.last_metrics.get("grid_kind") == "mesh")
 
     if detected_size is None or detected_size < 2:
         detected_size = 4
         detected_offset = (0, 0)
 
     # Step 2b: refine cell size using grid quality scoring against standard sizes
-    cell_size, offset = _pick_best_cell_size(rgb, detected_size, detected_offset)
+    if is_mesh:
+        cell_size, offset = detected_size, detected_offset
+    else:
+        cell_size, offset = _pick_best_cell_size(rgb, detected_size, detected_offset)
 
     if cell_size < MIN_CELL_SIZE:
         logger.debug("No valid grid detected in %s (cell_size=%s)", source_path, cell_size)
@@ -383,8 +307,9 @@ def clean_sprite(
 
     # Step 3b: if variance is too high, try all standard sizes as a fallback.
     # This helps with sprite sheets and images where the auto-detector picks
-    # a non-standard size that doesn't align well.
-    if cell_variance > max_cell_variance:
+    # a non-standard size that doesn't align well.  (Rigid grids only — a
+    # mesh's rigid-equivalent variance is misleading by construction.)
+    if not is_mesh and cell_variance > max_cell_variance:
         best_fallback = None
         for cs in STANDARD_CELL_SIZES:
             if cs < MIN_CELL_SIZE or h // cs < 4 or w // cs < 4:
@@ -417,6 +342,13 @@ def clean_sprite(
     cell_variance = metrics.get("intra_cell_variance", float("inf"))
     core_diff = metrics.get("percent_diff_core", 100.0)
     tolerant_core_diff = metrics.get("percent_diff_core_tolerant", core_diff)
+
+    if is_mesh:
+        # Rigid intra-cell variance doesn't describe a variable mesh fit;
+        # gate mesh reconstructions on the tolerant diff instead.
+        cell_variance = min(cell_variance, max_cell_variance) \
+            if tolerant_core_diff <= 50.0 else cell_variance
+        metrics["method"] = "mesh"
 
     warnings = []
     if isinstance(metrics.get("warnings"), list):
@@ -467,17 +399,22 @@ def clean_sprite(
         metrics["method"] = "variance_accepted"
 
     # Step 4: extract 1x pixel art
-    # The reconstructor returns a small image (num_cells_y x num_cells_x x 3)
-    # which IS the 1x pixel art.  Convert from BGR to RGB.
+    # The reconstructor returns a small RGB image (num_cells_y x num_cells_x
+    # x 3) which IS the 1x pixel art.
     if result is None:
         return None
 
-    image_1x = cv2.cvtColor(result, cv2.COLOR_BGR2RGB)
+    image_1x = result
 
-    # handle alpha: sample from the center of each cell in the original
+    # handle alpha: per-cell transparency majority over the same grid
     grid_h, grid_w = image_1x.shape[:2]
     if alpha_channel is not None:
-        alpha_1x = _extract_alpha_1x(alpha_channel, cell_size, offset, grid_h, grid_w)
+        if is_mesh and getattr(rec, "mesh_lines", None):
+            alpha_1x = color_ops.cell_alpha_mesh(alpha_channel, rec.mesh_lines)
+            if alpha_1x.shape != (grid_h, grid_w):  # defensive
+                alpha_1x = np.full((grid_h, grid_w), 255, dtype=np.uint8)
+        else:
+            alpha_1x = _extract_alpha_1x(alpha_channel, cell_size, offset, grid_h, grid_w)
         image_1x = np.dstack([image_1x, alpha_1x])
 
     # account for NN downscale in reported cell size
