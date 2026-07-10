@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pixel Perfecter — true 1× pixel art in your browser</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px; background: #14141a; color: #e6e6ea;
+    font: 15px/1.5 system-ui, sans-serif; min-height: 100vh;
+  }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: #9a9aa6; margin: 0 0 20px; }
+  #drop {
+    border: 2px dashed #44445a; border-radius: 12px; padding: 36px;
+    text-align: center; cursor: pointer; transition: border-color .15s, background .15s;
+  }
+  #drop.armed:hover, #drop.dragover { border-color: #7a7aff; background: #1b1b26; }
+  #drop.busy { cursor: wait; color: #9a9aa6; }
+  #controls { display: flex; gap: 16px; align-items: center; margin: 14px 0; flex-wrap: wrap; }
+  select, button {
+    background: #23232e; color: #e6e6ea; border: 1px solid #44445a;
+    border-radius: 6px; padding: 6px 12px; font: inherit; cursor: pointer;
+  }
+  button:disabled { opacity: .4; cursor: default; }
+  #status { color: #9a9aa6; min-height: 1.5em; }
+  #warn { color: #e8b34b; }
+  #results { display: none; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-top: 18px; }
+  .panel { background: #1b1b22; border-radius: 10px; padding: 12px; }
+  .panel h3 { margin: 0 0 8px; font-size: 14px; color: #b8b8c6; font-weight: 600; }
+  .panel canvas, .panel img {
+    width: 100%; image-rendering: pixelated; background:
+      repeating-conic-gradient(#20202a 0% 25%, #262633 0% 50%) 0 0 / 20px 20px;
+    border-radius: 6px;
+  }
+  #stats { margin-top: 14px; color: #b8b8c6; }
+  #stats b { color: #e6e6ea; }
+  a.dl { color: #8ab4ff; }
+  .foot { margin-top: 28px; color: #70707e; font-size: 13px; }
+  .foot a { color: #8ab4ff; }
+</style>
+</head>
+<body>
+<h1>Pixel Perfecter</h1>
+<p class="sub">Turns AI-generated “pixel art” into actual pixel art — grid-true, at native 1× resolution.
+Runs the real reconstruction engine in your browser via Pyodide; images never leave your machine.</p>
+
+<div id="drop">Loading Python runtime… (~15&nbsp;s on first visit)</div>
+<input id="file" type="file" accept="image/*" hidden>
+
+<div id="controls">
+  <label>Palette
+    <select id="palette">
+      <option value="none">keep original colors</option>
+      <option value="pico8">PICO-8</option>
+      <option value="db32">DawnBringer 32</option>
+      <option value="gameboy">Game Boy</option>
+    </select>
+  </label>
+  <button id="again" disabled>Re-run</button>
+  <span id="status"></span>
+</div>
+
+<div id="results">
+  <div class="panel"><h3>Original</h3><canvas id="cv-orig"></canvas></div>
+  <div class="panel"><h3>Detected grid</h3><img id="im-grid" alt="grid overlay"></div>
+  <div class="panel"><h3>Reconstruction (shown enlarged)</h3><canvas id="cv-rec"></canvas></div>
+</div>
+<div id="stats"></div>
+<div id="warn"></div>
+
+<p class="foot">
+  Everything runs locally. Source &amp; CLI/ComfyUI versions:
+  <a href="https://github.com/alexkorol/pixel-perfecter">github.com/alexkorol/pixel-perfecter</a>
+</p>
+
+<script src="https://cdn.jsdelivr.net/pyodide/v0.26.2/full/pyodide.js"></script>
+<script>
+const MODULES = ["__init__", "grid", "mesh", "colors", "reconstructor", "palettes"];
+const $ = (id) => document.getElementById(id);
+let pyodide = null, lastFile = null;
+
+async function boot() {
+  pyodide = await loadPyodide();
+  $("drop").textContent = "Loading numpy / OpenCV / Pillow…";
+  await pyodide.loadPackage(["numpy", "opencv-python", "pillow"]);
+  pyodide.FS.mkdirTree("/app/pixel_perfecter");
+  for (const m of MODULES) {
+    const r = await fetch(`../pixel_perfecter/${m}.py`, { cache: "no-cache" });
+    if (!r.ok) throw new Error(`cannot fetch core module ${m}.py — serve the repo root`);
+    pyodide.FS.writeFile(`/app/pixel_perfecter/${m}.py`, await r.text());
+  }
+  await pyodide.runPythonAsync(`
+import sys, io, json, time, base64
+sys.path.insert(0, "/app")
+import numpy as np
+from PIL import Image, ImageDraw
+from pixel_perfecter.reconstructor import PixelArtReconstructor
+from pixel_perfecter import palettes
+
+def _png_b64(arr):
+    buf = io.BytesIO()
+    Image.fromarray(arr).save(buf, format="PNG")
+    return base64.b64encode(buf.getvalue()).decode()
+
+def process(data, palette_name):
+    img = np.array(Image.open(io.BytesIO(bytes(data))).convert("RGB"))
+    rec = PixelArtReconstructor(image=img)
+    t0 = time.time()
+    out = rec.run("global")
+    elapsed = time.time() - t0
+    out = palettes.apply_palette_options(
+        out, None if palette_name == "none" else palette_name)
+
+    overlay = Image.fromarray(img).copy()
+    draw = ImageDraw.Draw(overlay)
+    h, w = img.shape[:2]
+    if rec.mesh_lines:
+        xs, ys = rec.mesh_lines
+    else:
+        cell = rec.cell_size or 4
+        ox, oy = rec.offset or (0, 0)
+        xs = range(int(ox), w, int(cell))
+        ys = range(int(oy), h, int(cell))
+    for x in xs: draw.line([(int(x), 0), (int(x), h)], fill=(255, 0, 80))
+    for y in ys: draw.line([(0, int(y)), (w, int(y))], fill=(255, 0, 80))
+
+    m = rec.last_metrics or {}
+    return json.dumps({
+        "png": _png_b64(out),
+        "grid_png": _png_b64(np.array(overlay)),
+        "cell": rec.cell_size, "kind": m.get("grid_kind", "?"),
+        "w": int(out.shape[1]), "h": int(out.shape[0]),
+        "seconds": round(elapsed, 2),
+        "no_grid": bool(m.get("no_grid", False)),
+        "warnings": list(m.get("warnings", [])),
+    })
+`);
+  $("drop").textContent = "Drop an image here — or click to choose";
+  $("drop").classList.add("armed");
+}
+
+async function run(file) {
+  if (!pyodide || !file) return;
+  lastFile = file;
+  $("drop").classList.add("busy");
+  $("status").textContent = "Reconstructing…";
+  $("warn").textContent = "";
+  try {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    pyodide.globals.set("js_data", bytes);
+    pyodide.globals.set("js_palette", $("palette").value);
+    const res = JSON.parse(await pyodide.runPythonAsync(
+      "process(js_data.to_py(), js_palette)"));
+    render(file, res);
+    $("status").textContent = "";
+    $("again").disabled = false;
+  } catch (err) {
+    $("status").textContent = "Failed: " + err;
+  } finally {
+    $("drop").classList.remove("busy");
+  }
+}
+
+function render(file, res) {
+  $("results").style.display = "grid";
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => {
+    const c = $("cv-orig");
+    c.width = img.width; c.height = img.height;
+    c.getContext("2d").drawImage(img, 0, 0);
+    URL.revokeObjectURL(url);
+  };
+  img.src = url;
+  $("im-grid").src = "data:image/png;base64," + res.grid_png;
+
+  const rec = new Image();
+  rec.onload = () => {
+    const c = $("cv-rec");
+    c.width = rec.width; c.height = rec.height;
+    const ctx = c.getContext("2d");
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(rec, 0, 0);
+  };
+  rec.src = "data:image/png;base64," + res.png;
+
+  $("stats").innerHTML =
+    `Detected pitch <b>${res.cell}px</b> (${res.kind} grid) &middot; ` +
+    `native size <b>${res.w}&times;${res.h}</b> &middot; ${res.seconds}s &middot; ` +
+    `<a class="dl" download="pixel_art_1x.png" ` +
+    `href="data:image/png;base64,${res.png}">download 1&times; PNG</a>`;
+  $("warn").textContent = res.no_grid
+    ? "⚠ No reliable pixel grid detected — this output is best-effort."
+    : (res.warnings || []).join("  ");
+}
+
+$("drop").addEventListener("click", () => {
+  if ($("drop").classList.contains("armed")) $("file").click();
+});
+$("file").addEventListener("change", (e) => run(e.target.files[0]));
+$("again").addEventListener("click", () => run(lastFile));
+["dragover", "dragleave", "drop"].forEach((ev) =>
+  $("drop").addEventListener(ev, (e) => {
+    e.preventDefault();
+    $("drop").classList.toggle("dragover", ev === "dragover");
+    if (ev === "drop") run(e.dataTransfer.files[0]);
+  }));
+
+// test hook: load an image by URL (used by automated checks)
+window.demoLoad = async (url) => {
+  const blob = await (await fetch(url)).blob();
+  await run(new File([blob], "sample.png", { type: blob.type }));
+  return document.getElementById("stats").textContent;
+};
+
+boot().catch((e) => { $("drop").textContent = "Startup failed: " + e; });
+</script>
+</body>
+</html>

@@ -415,7 +415,10 @@ def downsample_mesh(
     num_colors = len(palette)
     num_cells = grid_h * grid_w
 
-    combined = ids.astype(np.int64) * num_colors + labels
+    # np.intp, not int64: bincount requires the platform index type, and on
+    # 32-bit targets (Pyodide/wasm32) int64 input raises. Cell*color ids stay
+    # far below 2**31 (see MAX_BINCOUNT_CELLS in grid.py).
+    combined = ids.astype(np.intp) * num_colors + labels
     counts = np.bincount(combined.ravel(), minlength=num_cells * num_colors)
     modes = counts.reshape(num_cells, num_colors).argmax(axis=1)
     return palette[modes].reshape(grid_h, grid_w, 3)

@@ -118,7 +118,9 @@ def downsample_mode(
         small_labels, small_palette = _requantize(labels, palette, 256)
         return downsample_mode(small_labels, small_palette, cell, offset, trim_margin)
 
-    ids = cells + np.arange(gh * gw, dtype=np.int64)[:, None] * num_colors
+    # np.intp keeps bincount happy on 32-bit targets (Pyodide/wasm32); the
+    # MAX_BINCOUNT_CELLS budget above guarantees ids fit.
+    ids = cells + np.arange(gh * gw, dtype=np.intp)[:, None] * num_colors
     counts = np.bincount(ids.ravel(), minlength=gh * gw * num_colors)
     modes = counts.reshape(gh * gw, num_colors).argmax(axis=1)
     return palette[modes].reshape(gh, gw, 3)

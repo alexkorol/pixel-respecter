@@ -107,7 +107,8 @@ def dominant_color_binned(rgb_pixels: np.ndarray, bin_size: int = 52) -> Tuple[i
         return (int(median[0]), int(median[1]), int(median[2]))
 
     num_bins = 255 // bin_size + 1
-    pixels = rgb_pixels.astype(np.int64)
+    # np.intp, not int64: bincount rejects int64 on 32-bit targets (wasm32).
+    pixels = rgb_pixels.astype(np.intp)
 
     bins1 = pixels // bin_size
     idx1 = bins1[:, 0] * num_bins**2 + bins1[:, 1] * num_bins + bins1[:, 2]
