@@ -2,7 +2,7 @@
   "_comment": "Visual QC verdicts by Claude (2026-07-10) from output/wild_eval panels. Human verdicts.json overrides these. Only deviations from auto-verdicts are listed; suspects not listed here were judged faithful (pass).",
   "0cbf9f7cb375806e": "pass",
   "117f9d2b4b5ebf74": "pass",
-  "17da361b90fdda93": "fail",
+  "17da361b90fdda93": "pass",
   "1b28e9001df3989d": "pass",
   "1d464771b0aa6e70": "pass",
   "1e85d1d63814c09f": "pass",

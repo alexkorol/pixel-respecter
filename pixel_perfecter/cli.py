@@ -30,6 +30,7 @@ from PIL import Image
 
 from . import colors as color_ops
 from . import palettes
+from . import sheets
 from .reconstructor import (
     PixelArtReconstructor,
     build_validation_diagnostics,
@@ -58,6 +59,7 @@ class BatchConfig:
     palette: Optional[str] = None
     max_colors: Optional[int] = None
     transparent_bg: bool = False
+    split_frames: bool = False
 
 
 def _gather_images(sources: Sequence[Path], recursive: bool) -> List[Path]:
@@ -193,6 +195,16 @@ def _process_single_image(
 
     output_path = cfg.output_dir / f"{image_path.stem}_reconstructed{suffix}"
     Image.fromarray(result).save(output_path)
+
+    if cfg.split_frames:
+        # One reconstruction covers the whole sheet, so every frame shares
+        # the same grid, pitch, and palette by construction.
+        boxes = sheets.split_frames(result)
+        frames_dir = cfg.output_dir / f"{image_path.stem}_frames"
+        frames_dir.mkdir(parents=True, exist_ok=True)
+        for i, frame in enumerate(sheets.crop_frames(result, boxes)):
+            Image.fromarray(frame).save(frames_dir / f"frame_{i:02d}.png")
+        print(f"[INFO] {image_path.name}: {len(boxes)} frame(s) -> {frames_dir}")
 
     overlay_path: Optional[Path] = None
     if cfg.save_overlays and overlay is not None:
@@ -346,6 +358,12 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         help="Make the dominant border color transparent; output becomes PNG.",
     )
     parser.add_argument(
+        "--split-frames",
+        action="store_true",
+        help="Treat the image as a sprite sheet: also export each frame of "
+             "the shared-grid reconstruction as <stem>_frames/frame_NN.png.",
+    )
+    parser.add_argument(
         "--recursive",
         action="store_true",
         help="When inputs include directories, walk them recursively.",
@@ -411,6 +429,7 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         palette=None if args.palette == "none" else args.palette,
         max_colors=args.max_colors,
         transparent_bg=args.transparent_bg,
+        split_frames=args.split_frames,
     )
 
     suggest_fn = _load_ml_suggester(cfg.use_ml)

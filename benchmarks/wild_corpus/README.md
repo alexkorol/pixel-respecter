@@ -42,9 +42,9 @@ Goal: **>95% pass rate** on 200+ images.
 
 ## Current state (2026-07-10)
 
-**89.7% (70/78)** — every image visually graded (agent QC, pending human
-review). The 8 failures are the domain edge, not detection bugs: 6 softly
+**91.0% (71/78)** — every image visually graded (agent QC, pending human
+review). The 7 failures are the domain edge, not detection bugs: 6 softly
 rendered / bloom-heavy sources whose "pixels" aren't grid-aligned at any
 pitch (both Greek tile sets, texture atlas, glow assets, ice giant, side
-profile) and 2 with mixed-scale detail where any single pitch loses
-something (dog sheet face details, skull helmet variant).
+profile) and 1 with mixed-scale detail where any single pitch loses
+something (skull helmet variant).

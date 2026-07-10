@@ -71,6 +71,7 @@ python -m pixel_perfecter.cli input extra/*.png \
 | `--palette {pico8,db32,gameboy,none}` | Snap the reconstructed art to a fixed palette (CIELAB nearest-color). NES is omitted deliberately: the 2C02 has no canonical RGB palette. |
 | `--max-colors N` | Reduce the reconstruction to at most N colors (no dithering). |
 | `--transparent-bg` | Make the dominant border color transparent (output becomes PNG). |
+| `--split-frames` | Sprite-sheet mode: also export each frame of the shared-grid reconstruction as `<stem>_frames/frame_NN.png`. One reconstruction covers the sheet, so all frames share one grid, pitch, and palette. |
 | `--overlay-mode {combined,raw,halo_suppressed,core_only}` | Diagnostic composite to export. |
 | `--skip-overlays` | Do not write overlay images. |
 | `--ml` | Enable ML suggestions if `ml/` checkpoints are present (ignored in adaptive mode). |
