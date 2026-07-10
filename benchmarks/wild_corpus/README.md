@@ -42,9 +42,20 @@ Goal: **>95% pass rate** on 200+ images.
 
 ## Current state (2026-07-10)
 
-**91.0% (71/78)** — every image visually graded (agent QC, pending human
-review). The 7 failures are the domain edge, not detection bugs: 6 softly
-rendered / bloom-heavy sources whose "pixels" aren't grid-aligned at any
-pitch (both Greek tile sets, texture atlas, glow assets, ice giant, side
-profile) and 1 with mixed-scale detail where any single pitch loses
-something (skull helmet variant).
+**92.4% (220/238)** — every image visually graded (agent QC, pending human
+review). Corpus: 78 of the user's own ChatGPT generations + 160 curated
+SFW images from the Civitai public API (pixel-art LoRA models; provenance
+in `civitai_metadata.jsonl`).
+
+The 18 failures cluster into:
+- **~10 over-coarse picks** on dense fine-pitched art (no flat background).
+  Debugging shows the quality score is *flat* across pitches there — no
+  harmonic peak — so selection hinges on which candidate sizes happen to be
+  proposed. Next research step: bias selection toward finer pitch when the
+  score curve shows weak evidence (peakiness gate), validated against the
+  full corpus. A slight oversample preserves detail; a coarse miss destroys
+  it.
+- **6 softly rendered / bloom-heavy sources** whose "pixels" aren't
+  grid-aligned at any pitch. `--sharpen` visibly improves them but is not
+  auto-gated (no metric separates soft from crisp yet).
+- 2 other (garbled palette art, glitch streaks).
