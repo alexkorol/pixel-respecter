@@ -114,9 +114,29 @@ def downsample_mode(
     cells = view.transpose(0, 2, 1, 3).reshape(gh * gw, -1)
 
     if gh * gw * num_colors > MAX_BINCOUNT_CELLS:
-        # Palette too large for the bincount table: re-quantize to 256.
-        small_labels, small_palette = _requantize(labels, palette, 256)
-        return downsample_mode(small_labels, small_palette, cell, offset, trim_margin)
+        if num_colors > 256:
+            # Palette too large for the bincount table: re-quantize to 256.
+            # (Recurse at most once - the next call lands in the banded
+            # branch below. Recursing unconditionally used to loop forever
+            # when the CELL count alone blew the budget, exhausting stack
+            # or memory on huge/fine-pitched images.)
+            small_labels, small_palette = _requantize(labels, palette, 256)
+            return downsample_mode(
+                small_labels, small_palette, cell, offset, trim_margin
+            )
+        # Palette already small: bincount in bands of cell rows so the
+        # table stays within budget regardless of image size.
+        band = max(1, MAX_BINCOUNT_CELLS // (gw * num_colors))
+        out = np.empty((gh, gw, 3), dtype=palette.dtype)
+        for y0 in range(0, gh, band):
+            y1 = min(gh, y0 + band)
+            sub = cells[y0 * gw : y1 * gw]
+            n = sub.shape[0]
+            ids = sub + np.arange(n, dtype=np.intp)[:, None] * num_colors
+            counts = np.bincount(ids.ravel(), minlength=n * num_colors)
+            modes = counts.reshape(n, num_colors).argmax(axis=1)
+            out[y0:y1] = palette[modes].reshape(y1 - y0, gw, 3)
+        return out
 
     # np.intp keeps bincount happy on 32-bit targets (Pyodide/wasm32); the
     # MAX_BINCOUNT_CELLS budget above guarantees ids fit.

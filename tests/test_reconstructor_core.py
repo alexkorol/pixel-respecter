@@ -382,6 +382,19 @@ class TestReconstructorEndToEnd:
         giant = mesh_ops.mesh_quality_score(img, giant_mesh)
         assert fine > giant
 
+    def test_downsample_mode_banded_when_cells_exceed_budget(self, monkeypatch):
+        # When cell count alone blows the bincount budget, downsample_mode
+        # must band the computation instead of re-quantizing forever
+        # (used to recurse infinitely / exhaust memory on fine-pitched or
+        # huge images).
+        art = make_art(grid=24)
+        img = grid_ops.upscale_nn(art, 4)
+        labels, palette = grid_ops.label_image(img)
+        expected = grid_ops.downsample_mode(labels, palette, 4, (0, 0))
+        monkeypatch.setattr(grid_ops, "MAX_BINCOUNT_CELLS", 64)
+        banded = grid_ops.downsample_mode(labels, palette, 4, (0, 0))
+        assert np.array_equal(banded, expected)
+
     def test_unsharp_prepass_recovers_blurred_grid(self):
         import cv2
 
