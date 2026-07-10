@@ -260,7 +260,16 @@ def main() -> None:
     fields = ["id", "name", "source", "input_size", "auto_verdict", "reason",
               "cell_size", "grid_kind", "output_size", "core_diff_tol",
               "warnings", "seconds"]
-    with open(out_dir / "report.csv", "w", newline="", encoding="utf-8") as fh:
+    report_path = out_dir / "report.csv"
+    if args.only and report_path.exists():
+        # Partial re-run: merge into the existing report, don't clobber it.
+        fresh = {r["id"]: r for r in rows}
+        merged = []
+        with open(report_path, newline="", encoding="utf-8") as fh:
+            for old in csv.DictReader(fh):
+                merged.append(fresh.pop(old["id"], old))
+        rows = merged + list(fresh.values())
+    with open(report_path, "w", newline="", encoding="utf-8") as fh:
         writer = csv.DictWriter(fh, fieldnames=fields)
         writer.writeheader()
         writer.writerows(rows)
