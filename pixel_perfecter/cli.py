@@ -28,6 +28,7 @@ from typing import Callable, Iterable, List, Optional, Sequence
 
 from PIL import Image
 
+from . import colors as color_ops
 from . import palettes
 from .reconstructor import (
     PixelArtReconstructor,
@@ -56,6 +57,7 @@ class BatchConfig:
     metrics_path: Optional[Path]
     palette: Optional[str] = None
     max_colors: Optional[int] = None
+    transparent_bg: bool = False
 
 
 def _gather_images(sources: Sequence[Path], recursive: bool) -> List[Path]:
@@ -184,7 +186,12 @@ def _process_single_image(
     # above keep judging the raw reconstruction against the source.
     result = palettes.apply_palette_options(result, cfg.palette, cfg.max_colors)
 
-    output_path = cfg.output_dir / f"{image_path.stem}_reconstructed{image_path.suffix}"
+    suffix = image_path.suffix
+    if cfg.transparent_bg:
+        result = color_ops.make_background_transparent(result)
+        suffix = ".png"  # alpha needs a format that keeps it
+
+    output_path = cfg.output_dir / f"{image_path.stem}_reconstructed{suffix}"
     Image.fromarray(result).save(output_path)
 
     overlay_path: Optional[Path] = None
@@ -334,6 +341,11 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         help="Reduce the reconstructed art to at most N colors (no dithering).",
     )
     parser.add_argument(
+        "--transparent-bg",
+        action="store_true",
+        help="Make the dominant border color transparent; output becomes PNG.",
+    )
+    parser.add_argument(
         "--recursive",
         action="store_true",
         help="When inputs include directories, walk them recursively.",
@@ -398,6 +410,7 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         metrics_path=metrics_path,
         palette=None if args.palette == "none" else args.palette,
         max_colors=args.max_colors,
+        transparent_bg=args.transparent_bg,
     )
 
     suggest_fn = _load_ml_suggester(cfg.use_ml)

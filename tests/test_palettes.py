@@ -69,6 +69,26 @@ class TestReduceColors:
 
 
 class TestCliIntegration:
+    def test_transparent_bg_flag(self, tmp_path):
+        from pixel_perfecter.cli import main
+
+        art = make_art()
+        art[0, :] = art[-1, :] = art[:, 0] = art[:, -1] = (40, 42, 60)
+        img = np.repeat(np.repeat(art, 10, axis=0), 10, axis=1)
+        src = tmp_path / "sprite.png"
+        Image.fromarray(img).save(src)
+        out_dir = tmp_path / "out"
+        main([
+            str(src), "-o", str(out_dir), "--transparent-bg",
+            "--skip-overlays", "--no-metrics",
+        ])
+        result = np.array(Image.open(out_dir / "sprite_reconstructed.png"))
+        assert result.shape[2] == 4
+        border_alpha = result[0, :, 3]
+        assert (border_alpha == 0).all()
+        # interior non-background pixels stay opaque
+        assert (result[:, :, 3] == 255).any()
+
     def test_palette_flag_constrains_output(self, tmp_path):
         from pixel_perfecter.cli import main
 
