@@ -9,6 +9,8 @@ Pixel Perfecter turns degraded "pixel art" — AI-generated renders, scaled scre
 - **Core reconstructor (`pixel_perfecter/`)** – Detects the pixel grid (even non-integer upscales), collapses each cell to its dominant color, and emits halo-aware diagnostics.
 - **Interactive GUI (`python -m pixel_perfecter.gui`)** – PySide6 app with drag-and-drop import, live previews, and structured feedback logging.
 - **Batch CLI (`python -m pixel_perfecter.cli`)** – Processes files or directories, writes reconstructions plus overlays, and records metrics to CSV.
+- **ComfyUI node (`comfyui_pixel_perfecter/`)** – Drop the repo into `ComfyUI/custom_nodes/` and post-process generated images into true 1× pixel art inside any workflow. See its [README](comfyui_pixel_perfecter/README.md).
+- **Wild benchmark (`benchmarks/wild_corpus/`)** – Real AI-generated images + one-command eval (`python benchmarks/eval_wild.py`) with a visual verdict gallery.
 - **Meta pipeline (`pipeline/`)** – extract → clean → tag → caption → prompts → generate → package → train. Includes DCSS tile datamining and a curation gallery.
 - **LoRA training (`training/`)** – Fine-tuning infrastructure for the pixelize model.
 
