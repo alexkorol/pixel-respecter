@@ -31,7 +31,8 @@ from pixel_perfecter.reconstructor import PixelArtReconstructor
 
 CORPUS_DIR = Path(__file__).resolve().parent / "wild_corpus"
 MANIFEST_PATH = CORPUS_DIR / "manifest.json"
-VERDICTS_PATH = CORPUS_DIR / "verdicts.json"
+VERDICTS_PATH = CORPUS_DIR / "verdicts.json"          # human, final say
+AGENT_VERDICTS_PATH = CORPUS_DIR / "verdicts_agent.json"  # AI visual QC
 
 PANEL = 300
 # Auto-verdict thresholds (heuristics, human verdicts override):
@@ -228,9 +229,18 @@ def main() -> None:
     if args.limit:
         entries = entries[: args.limit]
 
+    # Verdict precedence: human > agent visual QC > auto heuristics.
     human = {}
+    if AGENT_VERDICTS_PATH.exists():
+        human.update({
+            k: v
+            for k, v in json.loads(
+                AGENT_VERDICTS_PATH.read_text(encoding="utf-8")
+            ).items()
+            if not k.startswith("_")
+        })
     if VERDICTS_PATH.exists():
-        human = json.loads(VERDICTS_PATH.read_text(encoding="utf-8"))
+        human.update(json.loads(VERDICTS_PATH.read_text(encoding="utf-8")))
 
     out_dir = args.out
     (out_dir / "panels").mkdir(parents=True, exist_ok=True)

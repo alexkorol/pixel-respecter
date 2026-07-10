@@ -386,6 +386,12 @@ class PixelArtReconstructor:
         fine = [item for item in gated if item[1] <= 48 and item[1] != best_size]
         if fine:
             seed_sizes.add(max(fine)[1])
+        # Half the winner, too: a fractional pitch like 15.5 shows up in the
+        # autocorr comb only as its 31/62/... multiples, so no fine rigid
+        # candidate exists to seed from. Integer half-pitches are harmless -
+        # the fractionality gate below discards them.
+        if best_size >= 16:
+            seed_sizes.add(best_size // 2)
 
         seen_pitches: set = set()
         for seed in seed_sizes:
