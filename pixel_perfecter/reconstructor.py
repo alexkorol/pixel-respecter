@@ -227,10 +227,16 @@ class PixelArtReconstructor:
         self.last_metrics["grid_kind"] = grid_kind
         self.last_metrics["regions"] = 1
         if best.get("no_grid"):
-            self.last_metrics["no_grid"] = True
-            self.last_metrics["warnings"].append(
-                "No reliable pixel grid detected - output is best-effort."
-            )
+            # The believability gate judges rigid candidates by raw variance,
+            # which false-alarms on noisy but genuinely grid-aligned art. The
+            # final say goes to the round-trip: a reconstruction that explains
+            # the source within tolerance IS a reliable grid.
+            core_tol = self.last_metrics.get("percent_diff_core_tolerant", 100.0)
+            if core_tol >= 15.0:
+                self.last_metrics["no_grid"] = True
+                self.last_metrics["warnings"].append(
+                    "No reliable pixel grid detected - output is best-effort."
+                )
         if self.debug:
             print(
                 f"  cell={self.cell_size} offset={self.offset} kind={grid_kind} "
@@ -373,21 +379,34 @@ class PixelArtReconstructor:
         # decisively better than the best rigid grid.
         mesh_candidates: List[Tuple[str, mesh_ops.Mesh, float]] = []
 
-        pitch_x = mesh_ops.estimate_float_pitch(h_proj, best_size)
-        pitch_y = mesh_ops.estimate_float_pitch(v_proj, best_size)
-        frac = max(abs(pitch_x - round(pitch_x)), abs(pitch_y - round(pitch_y)))
-        if frac > 0.03:
-            proj_mesh = (
-                mesh_ops.projection_mesh(h_proj, pitch_x),
-                mesh_ops.projection_mesh(v_proj, pitch_y),
-            )
-            if len(proj_mesh[0]) > 3 and len(proj_mesh[1]) > 3:
-                pitch = (pitch_x + pitch_y) / 2
-                mesh_candidates.append(("projection", proj_mesh, pitch))
+        # Seed float-pitch estimation from the winner AND from the strongest
+        # fine-pitch candidate: when a coarse harmonic wins the rigid vote,
+        # the true (often fractional) pitch is still among the fine sizes.
+        seed_sizes = {best_size}
+        fine = [item for item in gated if item[1] <= 48 and item[1] != best_size]
+        if fine:
+            seed_sizes.add(max(fine)[1])
+
+        seen_pitches: set = set()
+        for seed in seed_sizes:
+            pitch_x = mesh_ops.estimate_float_pitch(h_proj, seed)
+            pitch_y = mesh_ops.estimate_float_pitch(v_proj, seed)
+            frac = max(abs(pitch_x - round(pitch_x)), abs(pitch_y - round(pitch_y)))
+            key = (round(pitch_x, 1), round(pitch_y, 1))
+            if frac > 0.03 and key not in seen_pitches:
+                seen_pitches.add(key)
+                proj_mesh = (
+                    mesh_ops.projection_mesh(h_proj, pitch_x),
+                    mesh_ops.projection_mesh(v_proj, pitch_y),
+                )
+                if len(proj_mesh[0]) > 3 and len(proj_mesh[1]) > 3:
+                    pitch = (pitch_x + pitch_y) / 2
+                    mesh_candidates.append(("projection", proj_mesh, pitch))
 
         if (
             mesh_result is not None
             and not mesh_result.is_regular
+            and mesh_result.pixel_width <= max_size
             and len(mesh_result.lines_x) > 3
             and len(mesh_result.lines_y) > 3
         ):
@@ -412,6 +431,10 @@ class PixelArtReconstructor:
                         int(candidate_mesh[0][0]),
                         int(candidate_mesh[1][0]),
                     ),
+                    # A mesh that beats every rigid candidate decisively IS
+                    # a reliable grid; the rigid believability gate no
+                    # longer applies to it.
+                    no_grid=False,
                 )
 
         return result
@@ -633,6 +656,10 @@ class PixelArtReconstructor:
         tolerant = _compute_overlay_metrics(tolerant_ctx, cell_size, offset)
         metrics["percent_diff_core_tolerant"] = tolerant["percent_diff_core"]
         metrics["percent_diff_total_tolerant"] = tolerant["percent_diff_total"]
+        # Warnings must come from the tolerant diff: strict exact-color
+        # mismatch is ~100% on any noisy/anti-aliased source and says nothing
+        # about alignment quality.
+        metrics["warnings"] = tolerant["warnings"]
         metrics["intra_cell_variance"] = _compute_intra_cell_variance(
             original, cell_size, offset
         )

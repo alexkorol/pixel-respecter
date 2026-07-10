@@ -43,6 +43,18 @@ def upscale_fractional(art: np.ndarray, pitch: float) -> np.ndarray:
     return art[np.ix_(idx, idx)]
 
 
+def make_flat_bg_art(grid: int = 64, sprite: int = 24, seed: int = 7) -> np.ndarray:
+    """Sprite centered on a large flat background (typical AI output)."""
+    rng = np.random.default_rng(seed)
+    palette = rng.integers(0, 256, size=(12, 3), dtype=np.uint8)
+    art = np.full((grid, grid, 3), (40, 42, 60), dtype=np.uint8)
+    lo = (grid - sprite) // 2
+    art[lo : lo + sprite, lo : lo + sprite] = palette[
+        rng.integers(0, 12, size=(sprite, sprite))
+    ]
+    return art
+
+
 # ---------------------------------------------------------------------------
 # grid primitives
 # ---------------------------------------------------------------------------
@@ -325,6 +337,62 @@ class TestReconstructorEndToEnd:
         out = rec.run("global")
         assert rec.cell_size == 10
         assert out.shape == art.shape
+
+    def test_flat_background_sprite_keeps_fine_pitch(self):
+        # Sprites on flat backgrounds used to crown giant cells: at the true
+        # pitch most neighbor pairs are identical background (contrast
+        # diluted to ~0), while a handful of giant cells straddling subject
+        # and background scored huge contrast. The statistical-support
+        # weight in the quality scores prevents that.
+        rng = np.random.default_rng(3)
+        art = make_flat_bg_art()
+        img = upscale(art, 16).astype(np.float64)
+        img = np.clip(img + rng.normal(0, 5, img.shape), 0, 255).astype(np.uint8)
+        rec = PixelArtReconstructor(image=img)
+        out = rec.run("global")
+        assert rec.cell_size <= 32, f"giant pitch {rec.cell_size} won"
+        assert out.shape[0] >= 32, "output collapsed to a handful of cells"
+        assert not rec.last_metrics.get("no_grid", False)
+
+    def test_score_prefers_fine_pitch_over_giant_cells(self):
+        rng = np.random.default_rng(3)
+        art = make_flat_bg_art()
+        img = upscale(art, 16).astype(np.float64)
+        img = np.clip(img + rng.normal(0, 5, img.shape), 0, 255).astype(np.uint8)
+        fine = grid_ops.grid_quality_score(img, 16, (0, 0))
+        giant = grid_ops.grid_quality_score(img, 176, (0, 0))
+        assert fine > giant
+
+    def test_mesh_score_prefers_fine_pitch_over_giant_cells(self):
+        rng = np.random.default_rng(3)
+        art = make_flat_bg_art()
+        img = upscale(art, 16).astype(np.float64)
+        img = np.clip(img + rng.normal(0, 5, img.shape), 0, 255).astype(np.uint8)
+        n = img.shape[0]
+        fine_mesh = (
+            np.arange(0, n + 1, 16, dtype=float),
+            np.arange(0, n + 1, 16, dtype=float),
+        )
+        giant_mesh = (
+            np.arange(0, n + 1, 176, dtype=float),
+            np.arange(0, n + 1, 176, dtype=float),
+        )
+        fine = mesh_ops.mesh_quality_score(img, fine_mesh)
+        giant = mesh_ops.mesh_quality_score(img, giant_mesh)
+        assert fine > giant
+
+    def test_noisy_source_warnings_use_tolerant_diff(self):
+        # Noise makes the strict exact-color diff ~100% even when the grid is
+        # perfectly aligned; warnings must reflect the tolerant diff instead.
+        rng = np.random.default_rng(11)
+        art = make_art()
+        img = upscale(art, 10).astype(np.float64)
+        img = np.clip(img + rng.normal(0, 5, img.shape), 0, 255).astype(np.uint8)
+        rec = PixelArtReconstructor(image=img)
+        rec.run("global")
+        metrics = rec.last_metrics
+        assert metrics["percent_diff_core_tolerant"] < 5.0
+        assert not any("Core mismatch" in w for w in metrics["warnings"])
 
     def test_metrics_contract(self):
         rec = PixelArtReconstructor(image=upscale(make_art(), 8))

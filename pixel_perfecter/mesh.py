@@ -447,8 +447,14 @@ def mesh_quality_score(img: np.ndarray, mesh: Mesh) -> float:
     mean_grid = means.reshape(grid_h, grid_w, 3)
     h_diff = np.abs(mean_grid[:, :-1] - mean_grid[:, 1:]).sum(axis=-1)
     v_diff = np.abs(mean_grid[:-1, :] - mean_grid[1:, :]).sum(axis=-1)
-    inter = float(np.mean(np.concatenate([h_diff.ravel(), v_diff.ravel()])))
+    pairs = np.concatenate([h_diff.ravel(), v_diff.ravel()])
+    inter = float(pairs.mean())
+
+    # Same statistical-support weight as grid_quality_score: a mesh of a few
+    # giant cells straddling subject and background must not outscore a fine
+    # mesh judged over thousands of pairs.
+    support = float(np.sqrt(pairs.size / (pairs.size + 400.0)))
 
     if intra < 0.1:
-        return inter * 100.0
-    return inter / float(np.sqrt(intra))
+        return inter * 100.0 * support
+    return inter / float(np.sqrt(intra)) * support

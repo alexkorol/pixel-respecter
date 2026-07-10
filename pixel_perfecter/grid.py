@@ -163,11 +163,20 @@ def grid_quality_score(
 
     h_diff = np.abs(means[:, :-1] - means[:, 1:]).sum(axis=-1)
     v_diff = np.abs(means[:-1, :] - means[1:, :]).sum(axis=-1)
-    inter = float(np.mean(np.concatenate([h_diff.ravel(), v_diff.ravel()])))
+    pairs = np.concatenate([h_diff.ravel(), v_diff.ravel()])
+    inter = float(pairs.mean())
+
+    # Statistical support: a contrast mean over a handful of giant cells is
+    # not comparable to one over thousands of fine-pitch pairs. Without it,
+    # sprites on flat backgrounds crown huge cells (every pair straddles
+    # subject and background) over the true pitch, whose mean contrast is
+    # diluted by identical background neighbors. Negligible above ~2000
+    # pairs, strong below ~200.
+    support = float(np.sqrt(pairs.size / (pairs.size + 400.0)))
 
     if intra < 0.1:
-        return inter * 100.0
-    return inter / float(np.sqrt(intra))
+        return inter * 100.0 * support
+    return inter / float(np.sqrt(intra)) * support
 
 
 def intra_cell_variance(
