@@ -34,6 +34,7 @@ from . import sheets
 from .reconstructor import (
     PixelArtReconstructor,
     build_validation_diagnostics,
+    unsharp_prepass,
     _evaluate_with_parameters,
 )
 
@@ -60,6 +61,7 @@ class BatchConfig:
     max_colors: Optional[int] = None
     transparent_bg: bool = False
     split_frames: bool = False
+    sharpen: bool = False
 
 
 def _gather_images(sources: Sequence[Path], recursive: bool) -> List[Path]:
@@ -123,7 +125,16 @@ def _process_single_image(
 ) -> Optional[dict]:
     """Run the reconstruction pipeline for one image and persist artefacts."""
     try:
-        reconstructor = PixelArtReconstructor(str(image_path), debug=cfg.debug)
+        if cfg.sharpen:
+            import numpy as np
+
+            with Image.open(image_path) as im:
+                source = np.array(im.convert("RGB"))
+            reconstructor = PixelArtReconstructor(
+                image=unsharp_prepass(source), debug=cfg.debug
+            )
+        else:
+            reconstructor = PixelArtReconstructor(str(image_path), debug=cfg.debug)
         reconstructor.use_hough = cfg.use_hough
         reconstructor.initial_upscale = cfg.initial_upscale
         result = reconstructor.run(mode=cfg.mode)
@@ -364,6 +375,13 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
              "the shared-grid reconstruction as <stem>_frames/frame_NN.png.",
     )
     parser.add_argument(
+        "--sharpen",
+        action="store_true",
+        help="Unsharp-mask the source before reconstruction. Recovers cell "
+             "detail on softly rendered / bloom-heavy sources; avoid on "
+             "already-crisp input (amplifies noise).",
+    )
+    parser.add_argument(
         "--recursive",
         action="store_true",
         help="When inputs include directories, walk them recursively.",
@@ -430,6 +448,7 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         max_colors=args.max_colors,
         transparent_bg=args.transparent_bg,
         split_frames=args.split_frames,
+        sharpen=args.sharpen,
     )
 
     suggest_fn = _load_ml_suggester(cfg.use_ml)

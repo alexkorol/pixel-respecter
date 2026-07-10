@@ -17,6 +17,7 @@ from pixel_perfecter.reconstructor import (
     PixelArtReconstructor,
     _build_diff_context,
     _compute_intra_cell_variance,
+    unsharp_prepass,
 )
 
 
@@ -380,6 +381,24 @@ class TestReconstructorEndToEnd:
         fine = mesh_ops.mesh_quality_score(img, fine_mesh)
         giant = mesh_ops.mesh_quality_score(img, giant_mesh)
         assert fine > giant
+
+    def test_unsharp_prepass_recovers_blurred_grid(self):
+        import cv2
+
+        art = make_art()
+        img = cv2.GaussianBlur(upscale(art, 10), (5, 5), 2.0)
+        sharpened = unsharp_prepass(img)
+        rec = PixelArtReconstructor(image=sharpened)
+        out = rec.run("global")
+        assert rec.cell_size == 10
+        assert out.shape == art.shape
+
+    def test_unsharp_prepass_preserves_alpha_and_shape(self):
+        art = make_art()
+        rgba = np.dstack([art, np.full(art.shape[:2], 77, dtype=np.uint8)])
+        out = unsharp_prepass(rgba)
+        assert out.shape == rgba.shape
+        assert np.array_equal(out[:, :, 3], rgba[:, :, 3])
 
     def test_noisy_source_warnings_use_tolerant_diff(self):
         # Noise makes the strict exact-color diff ~100% even when the grid is

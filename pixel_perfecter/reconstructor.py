@@ -33,6 +33,26 @@ from . import colors as color_ops
 from . import grid as grid_ops
 from . import mesh as mesh_ops
 
+
+def unsharp_prepass(
+    img: np.ndarray, sigma: float = 2.0, amount: float = 1.5
+) -> np.ndarray:
+    """Unsharp-mask a soft source before reconstruction.
+
+    Softly rendered "pixel art" (bloom-heavy or blurry AI output) loses cell
+    detail to averaging; sharpening first recovers visibly crisper cells.
+    Not applied automatically: on already-crisp sources it amplifies noise,
+    and no current metric can tell the cases apart (the tolerant diff gets
+    *worse* on sharpened sources even when the output looks better).
+    """
+    rgb = img[:, :, :3]
+    blur = cv2.GaussianBlur(rgb, (0, 0), sigma)
+    sharp = cv2.addWeighted(rgb, 1 + amount, blur, -amount, 0)
+    out = np.clip(sharp, 0, 255).astype(np.uint8)
+    if img.shape[2] == 4:
+        return np.dstack([out, img[:, :, 3]])
+    return out
+
 # Refinement explores phase candidates around the folded-phase estimate.
 _OFFSET_NEIGHBORHOOD = (-1, 0, 1)
 
