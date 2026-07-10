@@ -795,6 +795,15 @@ def build_validation_diagnostics(
     overlays = _render_diagnostic_overlays(original, rec_up, diff_ctx)
     metrics = _compute_overlay_metrics(diff_ctx, cell_size, offset)
 
+    # As in _evaluate_metrics_local: warnings judge the tolerant diff, since
+    # strict exact-color mismatch is ~100% on any noisy source.
+    tolerant_ctx = _build_diff_context(original, rec_up, cell_size, offset,
+                                       tolerance=20)
+    tolerant = _compute_overlay_metrics(tolerant_ctx, cell_size, offset)
+    metrics["percent_diff_core_tolerant"] = tolerant["percent_diff_core"]
+    metrics["percent_diff_total_tolerant"] = tolerant["percent_diff_total"]
+    metrics["warnings"] = tolerant["warnings"]
+
     return {
         "original": original,
         "upscaled_reconstruction": rec_up,

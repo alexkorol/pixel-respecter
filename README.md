@@ -67,6 +67,8 @@ python -m pixel_perfecter.cli input extra/*.png \
 | `-o, --output-dir PATH` | Destination for reconstructed sprites (default: `./output`). |
 | `--overlay-dir PATH` | Optional directory for validation overlays (defaults to the output dir). |
 | `--mode {global,adaptive}` | Grid strategy. Adaptive fits per-region grids when a single lattice fails. |
+| `--palette {pico8,db32,gameboy,none}` | Snap the reconstructed art to a fixed palette (CIELAB nearest-color). NES is omitted deliberately: the 2C02 has no canonical RGB palette. |
+| `--max-colors N` | Reduce the reconstruction to at most N colors (no dithering). |
 | `--overlay-mode {combined,raw,halo_suppressed,core_only}` | Diagnostic composite to export. |
 | `--skip-overlays` | Do not write overlay images. |
 | `--ml` | Enable ML suggestions if `ml/` checkpoints are present (ignored in adaptive mode). |

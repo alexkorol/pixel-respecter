@@ -20,11 +20,15 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
+from pixel_perfecter import palettes  # noqa: E402
 from pixel_perfecter.reconstructor import PixelArtReconstructor  # noqa: E402
 
 
 def reconstruct_array(
-    img: np.ndarray, mode: str = "global"
+    img: np.ndarray,
+    mode: str = "global",
+    palette: str = "none",
+    max_colors: int = 0,
 ) -> Tuple[np.ndarray, np.ndarray, int]:
     """Reconstruct one uint8 RGB image.
 
@@ -32,6 +36,9 @@ def reconstruct_array(
     """
     rec = PixelArtReconstructor(image=np.ascontiguousarray(img[:, :, :3]))
     native = rec.run(mode)
+    native = palettes.apply_palette_options(
+        native, None if palette == "none" else palette, max_colors or None
+    )
     h, w = img.shape[:2]
     # NN-upscale the 1x art back to the source canvas for in-place chaining.
     ys = np.minimum((np.arange(h) * native.shape[0]) // h, native.shape[0] - 1)
@@ -69,17 +76,30 @@ class PixelPerfecter:
             "required": {
                 "image": ("IMAGE",),
                 "mode": (["global", "adaptive"], {"default": "global"}),
-            }
+            },
+            "optional": {
+                "palette": (
+                    ["none"] + sorted(palettes.PALETTES),
+                    {"default": "none"},
+                ),
+                "max_colors": (
+                    "INT",
+                    {"default": 0, "min": 0, "max": 256,
+                     "tooltip": "0 = unlimited; otherwise reduce to N colors"},
+                ),
+            },
         }
 
-    def reconstruct(self, image, mode: str = "global"):
+    def reconstruct(
+        self, image, mode: str = "global", palette: str = "none", max_colors: int = 0
+    ):
         import torch
 
         batch = image.detach().cpu().numpy()
         natives, upscaled, cells = [], [], []
         for item in batch:
             img = np.clip(item * 255.0, 0, 255).astype(np.uint8)
-            native, up, cell = reconstruct_array(img, mode)
+            native, up, cell = reconstruct_array(img, mode, palette, max_colors)
             natives.append(native)
             upscaled.append(up)
             cells.append(cell)

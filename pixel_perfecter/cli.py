@@ -28,6 +28,7 @@ from typing import Callable, Iterable, List, Optional, Sequence
 
 from PIL import Image
 
+from . import palettes
 from .reconstructor import (
     PixelArtReconstructor,
     build_validation_diagnostics,
@@ -53,6 +54,8 @@ class BatchConfig:
     save_overlays: bool
     grid_debug_dir: Optional[Path]
     metrics_path: Optional[Path]
+    palette: Optional[str] = None
+    max_colors: Optional[int] = None
 
 
 def _gather_images(sources: Sequence[Path], recursive: bool) -> List[Path]:
@@ -177,6 +180,10 @@ def _process_single_image(
     metrics = best["metrics"]
     reconstructor = best["reconstructor"]
 
+    # Palette constraints are a stylization of the final asset; diagnostics
+    # above keep judging the raw reconstruction against the source.
+    result = palettes.apply_palette_options(result, cfg.palette, cfg.max_colors)
+
     output_path = cfg.output_dir / f"{image_path.stem}_reconstructed{image_path.suffix}"
     Image.fromarray(result).save(output_path)
 
@@ -194,8 +201,11 @@ def _process_single_image(
     if warnings:
         print(f"[WARN] {image_path.name}: {' | '.join(warnings)}")
     else:
-        summary = metrics.get("percent_diff", metrics.get("percent_diff_total", 0.0))
-        print(f"[OK] {image_path.name}: diff={summary:.2f}%")
+        summary = metrics.get(
+            "percent_diff_core_tolerant",
+            metrics.get("percent_diff", metrics.get("percent_diff_total", 0.0)),
+        )
+        print(f"[OK] {image_path.name}: tolerant core diff={summary:.2f}%")
 
     record = {
         "image": image_path.name,
@@ -313,6 +323,17 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         help="Custom directory for grid debug plots.",
     )
     parser.add_argument(
+        "--palette",
+        choices=sorted(palettes.PALETTES) + ["none"],
+        default="none",
+        help="Snap the reconstructed art to a fixed palette (CIELAB nearest).",
+    )
+    parser.add_argument(
+        "--max-colors",
+        type=int,
+        help="Reduce the reconstructed art to at most N colors (no dithering).",
+    )
+    parser.add_argument(
         "--recursive",
         action="store_true",
         help="When inputs include directories, walk them recursively.",
@@ -375,6 +396,8 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         save_overlays=not args.skip_overlays,
         grid_debug_dir=grid_debug_dir,
         metrics_path=metrics_path,
+        palette=None if args.palette == "none" else args.palette,
+        max_colors=args.max_colors,
     )
 
     suggest_fn = _load_ml_suggester(cfg.use_ml)
