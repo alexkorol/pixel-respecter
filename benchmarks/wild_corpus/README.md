@@ -1,4 +1,4 @@
-# Wild-Input Benchmark Corpus
+﻿# Wild-Input Benchmark Corpus
 
 Real AI-generated "pixel art" images (Midjourney / ChatGPT / SD / Gemini output)
 used to measure how reliably the reconstructor handles inputs it was built for:
@@ -42,7 +42,7 @@ Goal: **>95% pass rate** on 200+ images.
 
 ## Current state (2026-07-10, post peakiness gate)
 
-**99.5% (215/216).** Corpus: 78 of the user's own ChatGPT generations +
+**99.1% (214/216).** Corpus: 78 of the user's own ChatGPT generations +
 138 curated SFW images from the Civitai public API (pixel-art LoRA
 models; provenance in `civitai_metadata.jsonl`). 22 total exclusions
 (17 from a strict agent re-curation, 5 from the user's bench review —
