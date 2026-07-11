@@ -477,6 +477,72 @@ class TestReconstructorEndToEnd:
         out = rec.run("global")
         assert out.ndim == 3
 
+
+class TestPeakinessGate:
+    """Selection under flat vs peaked score curves (wild-corpus fix).
+
+    On dense fine-pitched art the quality score is nearly flat across
+    pitches, so the argmax (and the largest-within-a-whisker harmonic
+    tie-break) lands on an arbitrary coarse size that destroys the art.
+    The gate detects the flat curve and prefers the finest decent pitch;
+    fine sizes 3-8 are always proposed so that end of the range competes.
+    """
+
+    @staticmethod
+    def _mixed_pitch_image() -> np.ndarray:
+        """Two pitches side by side + noise/blur: flat multi-pitch evidence."""
+        import cv2
+
+        rng = np.random.default_rng(7)
+        palette = rng.integers(0, 256, size=(12, 3), dtype=np.uint8)
+
+        def art(pitch: int, n: int = 480, seed: int = 1) -> np.ndarray:
+            r = np.random.default_rng(seed)
+            g = n // pitch + 1
+            a = palette[r.integers(0, 12, size=(g, g))]
+            return np.repeat(np.repeat(a, pitch, 0), pitch, 1)[:n, :n]
+
+        img = np.concatenate([art(6, seed=2), art(14, seed=3)], axis=1)
+        img = img.astype(np.float64)
+        img += np.random.default_rng(4).normal(0, 6, img.shape)
+        return cv2.GaussianBlur(
+            np.clip(img, 0, 255).astype(np.uint8), (3, 3), 1.2
+        )
+
+    def test_fine_pitches_always_proposed(self):
+        # Coarse blocky art: no detector proposes anything below 16, so the
+        # fine end of the range must be injected to compete at all.
+        rng = np.random.default_rng(3)
+        art = make_art(grid=8, colors=6, seed=3)
+        img = upscale(art, 32).astype(np.float64)
+        img = np.clip(img + rng.normal(0, 2, img.shape), 0, 255).astype(np.uint8)
+        rec = PixelArtReconstructor(image=img)
+        rec.run("global")
+        proposed = {c["size"] for c in rec.last_fit_debug["candidates"]}
+        assert set(range(3, 9)) <= proposed
+
+    def test_flat_evidence_prefers_fine_pitch(self):
+        rec = PixelArtReconstructor(image=self._mixed_pitch_image())
+        rec.run("global")
+        assert rec.last_fit_debug["peaked"] is False
+        assert rec.cell_size <= 8, (
+            f"flat evidence must err fine, picked {rec.cell_size}"
+        )
+        assert not rec.last_metrics.get("no_grid", False)
+
+    def test_clean_subdivision_does_not_outvote_native(self):
+        # 8x8 art upscaled x32: cells of 8 subdivide the uniform 32-blocks
+        # with near-zero variance and an inflated score. The native 32 must
+        # still win (fine sizes are a safety net, not a harmonic shortcut).
+        rng = np.random.default_rng(3)
+        art = make_art(grid=8, colors=6, seed=3)
+        img = upscale(art, 32).astype(np.float64)
+        img = np.clip(img + rng.normal(0, 2, img.shape), 0, 255).astype(np.uint8)
+        rec = PixelArtReconstructor(image=img)
+        rec.run("global")
+        assert rec.cell_size == 32
+        assert rec.last_fit_debug["peaked"] is True
+
     def test_requires_an_image(self):
         with pytest.raises(ValueError):
             PixelArtReconstructor()

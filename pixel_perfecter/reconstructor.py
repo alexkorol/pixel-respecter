@@ -69,6 +69,23 @@ _MESH_PREFERENCE_FACTOR = 1.10
 # content measures 600+ at every coarse size). Matches the cleaner's gate.
 _VARIANCE_CEILING = 600.0
 
+# Peakiness gate: the harmonic tie-break (and trusting the argmax at all) is
+# only sound when the score curve actually peaks. best/median >= this over
+# the gated candidates counts as peaked; flatter curves get the finer-pitch
+# preference instead — on dense fine-pitched art the curve is nearly flat
+# and the argmax lands on an arbitrary coarse size that destroys detail.
+_PEAK_MEDIAN_FACTOR = 1.25
+
+# Under flat evidence, prefer the finest candidate scoring at least this
+# fraction of the best. A slight oversample preserves the art; an
+# over-coarse pick is unrecoverable.
+_FLAT_KEEP_FRACTION = 0.80
+
+# An always-proposed fine candidate with intra-cell variance below this is
+# just a clean subdivision of coarser art (uniform blocks split into uniform
+# quarters score artificially high); it may not outvote the organic winner.
+_SUBDIVISION_VARIANCE = 60.0
+
 
 class PixelArtReconstructor:
     """Consolidated pixel art reconstruction pipeline.
@@ -107,6 +124,8 @@ class PixelArtReconstructor:
         self.mesh_lines: Optional[mesh_ops.Mesh] = None
         self._labels: Optional[np.ndarray] = None
         self._palette: Optional[np.ndarray] = None
+        # Full candidate table from the last _fit_grid call (diagnostics).
+        self.last_fit_debug: Optional[dict] = None
         self._edge_map: Optional[np.ndarray] = None
 
     # ------------------------------------------------------------------
@@ -312,6 +331,14 @@ class PixelArtReconstructor:
         for _, size in sweep[:8]:
             _add(size, "fold")
 
+        # Source 5: always-proposed fine pitches. Dense fine-pitched art
+        # often has no autocorr/mesh peak at all, so nothing else proposes
+        # the fine end of the range and selection degenerates to whichever
+        # coarse sizes happened to be suggested. These can only win outright
+        # or under the flat-evidence rule in the selection below.
+        for size in range(3, 9):
+            _add(size, "fine")
+
         if not candidates:
             return {
                 "cell_size": 4, "offset": (0, 0), "score": 0.0,
@@ -364,23 +391,101 @@ class PixelArtReconstructor:
             variances[(size, offset)] = var
             if var <= _VARIANCE_CEILING:
                 gated.append((score, size, offset))
+        self.last_fit_debug = {
+            "candidates": [
+                {
+                    "size": size,
+                    "source": candidates.get(size, "?"),
+                    "offset": list(offset),
+                    "score": score,
+                    "variance": variances[(size, offset)],
+                    "gated_out": variances[(size, offset)] > _VARIANCE_CEILING,
+                }
+                for score, size, offset in scored
+            ],
+            "mesh_candidates": [],
+        }
         if not gated:
             # Nothing believable: not grid-aligned pixel art. Degrade
             # gracefully to the most uniform (finest-explaining) candidate.
+            # The always-proposed fine sizes don't compete here: they are
+            # trivially uniform and would mask the no-grid condition.
             no_grid = True
+            organic_scored = [
+                item for item in scored if candidates.get(item[1]) != "fine"
+            ]
             gated = sorted(
-                scored,
+                organic_scored or scored,
                 key=lambda item: (variances[(item[1], item[2])], item[1]),
             )[:1]
 
-        best_score, best_size, best_offset = gated[0]
-        if not no_grid:
-            # Harmonic tie-break: prefer the largest size whose score is
-            # within a whisker of the best (5 vs 10 both score "perfect";
-            # 10 is the native resolution).
-            for score, size, offset in gated[1:]:
-                if score >= best_score * (1 - _SCORE_TIE_FRACTION) and size > best_size:
-                    best_size, best_offset, best_score = size, offset, score
+        # Organic candidates carry positive evidence from a detector; the
+        # always-proposed fine sizes are a safety net and get less trust.
+        organic_gated = [
+            item for item in gated if candidates.get(item[1]) != "fine"
+        ]
+        median_score = float(np.median([item[0] for item in gated]))
+        peaked = (
+            median_score > 0
+            and gated[0][0] >= _PEAK_MEDIAN_FACTOR * median_score
+        )
+
+        def _harmonic_tiebreak(
+            pool: List[Tuple[float, int, Tuple[int, int]]],
+            base: Tuple[float, int, Tuple[int, int]],
+        ) -> Tuple[float, int, Tuple[int, int]]:
+            # Prefer the largest size whose score is within a whisker of the
+            # base (5 vs 10 both score "perfect"; 10 is the native
+            # resolution).
+            pick = base
+            for entry in pool:
+                if (
+                    entry[0] >= base[0] * (1 - _SCORE_TIE_FRACTION)
+                    and entry[1] > pick[1]
+                ):
+                    pick = entry
+            return pick
+
+        # fine_spike: a fine candidate with genuine texture (not a clean
+        # subdivision) that outscores every organic candidate. Adopted only
+        # if no mesh explains the image better (checked further down).
+        fine_spike: Optional[Tuple[float, int, Tuple[int, int]]] = None
+        if no_grid:
+            best_score, best_size, best_offset = gated[0]
+            mesh_ref = best_score
+        elif peaked:
+            pool = organic_gated or gated
+            base = max(pool, key=lambda item: item[0])
+            best_score, best_size, best_offset = _harmonic_tiebreak(pool, base)
+            mesh_ref = base[0]
+            top = gated[0]
+            if (
+                candidates.get(top[1]) == "fine"
+                and top[0] > base[0]
+                and variances[(top[1], top[2])] > _SUBDIVISION_VARIANCE
+            ):
+                fine_spike = top
+        else:
+            # Flat curve: no size is meaningfully better than the rest, so
+            # the argmax is arbitrary. Take the finest decent candidate.
+            keep = [
+                item
+                for item in gated
+                if item[0] >= gated[0][0] * _FLAT_KEEP_FRACTION and item[1] >= 3
+            ] or gated[:1]
+            best_score, best_size, best_offset = min(
+                keep, key=lambda item: item[1]
+            )
+            mesh_ref = gated[0][0]
+            # Flat, fine-only evidence is no evidence of a grid at all.
+            no_grid = not organic_gated
+        if self.debug:
+            print(
+                f"DEBUG: selection mode="
+                f"{'no_grid' if no_grid else 'peaked' if peaked else 'flat'} "
+                f"median={median_score:.2f} pick={best_size} "
+                f"score={best_score:.2f}"
+            )
 
         result: Dict[str, object] = {
             "cell_size": best_size,
@@ -403,6 +508,15 @@ class PixelArtReconstructor:
         # fine-pitch candidate: when a coarse harmonic wins the rigid vote,
         # the true (often fractional) pitch is still among the fine sizes.
         seed_sizes = {best_size}
+        # ... and from the top-scoring organic candidate even when the
+        # variance gate rejected it: noisy-but-real pitches (e.g. a 16px
+        # grid the rigid gate can't believe) still seed a projection mesh.
+        organic_scored_best = next(
+            (item for item in scored if candidates.get(item[1]) != "fine"),
+            None,
+        )
+        if organic_scored_best is not None:
+            seed_sizes.add(organic_scored_best[1])
         fine = [item for item in gated if item[1] <= 48 and item[1] != best_size]
         if fine:
             seed_sizes.add(max(fine)[1])
@@ -440,29 +554,69 @@ class PixelArtReconstructor:
                 ("hough", mesh_result.mesh, mesh_result.pixel_width)
             )
 
+        engaged_meshes: List[Tuple[float, mesh_ops.Mesh, float]] = []
         for kind, candidate_mesh, pitch in mesh_candidates:
             mesh_score = mesh_ops.mesh_quality_score(img, candidate_mesh)
+            self.last_fit_debug["mesh_candidates"].append(
+                {"kind": kind, "pitch": pitch, "score": mesh_score}
+            )
             if self.debug:
                 print(
                     f"DEBUG: {kind} mesh score={mesh_score:.1f} "
-                    f"(pitch={pitch:.2f}) vs best {result['score']:.1f}"
+                    f"(pitch={pitch:.2f}) vs ref {mesh_ref:.1f}"
                 )
-            if mesh_score > result["score"] * _MESH_PREFERENCE_FACTOR:
-                result.update(
-                    use_mesh=True,
-                    mesh_lines=candidate_mesh,
-                    score=mesh_score,
-                    cell_size=max(2, int(round(pitch))),
-                    offset=(
-                        int(candidate_mesh[0][0]),
-                        int(candidate_mesh[1][0]),
-                    ),
-                    # A mesh that beats every rigid candidate decisively IS
-                    # a reliable grid; the rigid believability gate no
-                    # longer applies to it.
-                    no_grid=False,
-                )
+            if mesh_score > mesh_ref * _MESH_PREFERENCE_FACTOR:
+                engaged_meshes.append((mesh_score, candidate_mesh, pitch))
 
+        if engaged_meshes:
+            # A mesh must decisively beat the rigid *evidence* (mesh_ref),
+            # not the possibly-deliberately-finer rigid pick. Among engaged
+            # meshes the best score wins; under flat evidence prefer the
+            # finest pitch within the keep fraction (same policy as rigid).
+            best_mesh_score = max(item[0] for item in engaged_meshes)
+            if peaked or no_grid:
+                mesh_score, candidate_mesh, pitch = max(
+                    engaged_meshes, key=lambda item: item[0]
+                )
+            else:
+                mesh_score, candidate_mesh, pitch = min(
+                    (
+                        item for item in engaged_meshes
+                        if item[0] >= best_mesh_score * _FLAT_KEEP_FRACTION
+                    ),
+                    key=lambda item: item[2],
+                )
+            result.update(
+                use_mesh=True,
+                mesh_lines=candidate_mesh,
+                score=mesh_score,
+                cell_size=max(2, int(round(pitch))),
+                offset=(
+                    int(candidate_mesh[0][0]),
+                    int(candidate_mesh[1][0]),
+                ),
+                # A mesh that beats the rigid evidence decisively IS a
+                # reliable grid; the rigid believability gate no longer
+                # applies to it.
+                no_grid=False,
+            )
+        elif fine_spike is not None:
+            spike = _harmonic_tiebreak(gated, fine_spike)
+            result.update(
+                cell_size=spike[1], offset=spike[2], score=spike[0]
+            )
+
+        self.last_fit_debug.update(
+            median_score=median_score,
+            peaked=peaked,
+            rigid_pick={"size": best_size, "score": best_score},
+            final_pick={
+                "size": result["cell_size"],
+                "score": result["score"],
+                "use_mesh": result["use_mesh"],
+                "no_grid": result["no_grid"],
+            },
+        )
         return result
 
     @staticmethod
