@@ -42,20 +42,22 @@ Goal: **>95% pass rate** on 200+ images.
 
 ## Current state (2026-07-10)
 
-**92.4% (220/238)** — every image visually graded (agent QC, pending human
-review). Corpus: 78 of the user's own ChatGPT generations + 160 curated
+**94.6% (209/221)** — every image visually graded (agent QC, pending human
+review). Corpus: 78 of the user's own ChatGPT generations + 143 curated
 SFW images from the Civitai public API (pixel-art LoRA models; provenance
-in `civitai_metadata.jsonl`).
+in `civitai_metadata.jsonl`). A strict domain re-curation excluded 17
+photographic / 3D-soft images that had no pixel grid at any pitch —
+they weren't fair tests in either direction; see `excluded.json` for the
+list with reasons.
 
-The 18 failures cluster into:
-- **~10 over-coarse picks** on dense fine-pitched art (no flat background).
+The 12 failures cluster into:
+- **~5 over-coarse picks** on dense fine-pitched art (no flat background).
   Debugging shows the quality score is *flat* across pitches there — no
   harmonic peak — so selection hinges on which candidate sizes happen to be
   proposed. Next research step: bias selection toward finer pitch when the
   score curve shows weak evidence (peakiness gate), validated against the
-  full corpus. A slight oversample preserves detail; a coarse miss destroys
-  it.
-- **6 softly rendered / bloom-heavy sources** whose "pixels" aren't
-  grid-aligned at any pitch. `--sharpen` visibly improves them but is not
-  auto-gated (no metric separates soft from crisp yet).
-- 2 other (garbled palette art, glitch streaks).
+  full corpus. Two more passes clear the 95% goal.
+- **~5 softly rendered / bloom-heavy sources** at the domain boundary
+  (visible pixel intent, soft execution). `--sharpen` visibly improves
+  them but is not auto-gated (no metric separates soft from crisp yet).
+- 2 other (mixed-scale detail, glitch streaks).
