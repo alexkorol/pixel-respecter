@@ -40,24 +40,18 @@ heuristics. The tolerant-diff heuristics are triage only — they demonstrably
 do not track visual quality, so every suspect needs eyes on it.
 Goal: **>95% pass rate** on 200+ images.
 
-## Current state (2026-07-10)
+## Current state (2026-07-10, human-reviewed)
 
-**94.6% (209/221)** — every image visually graded (agent QC, pending human
-review). Corpus: 78 of the user's own ChatGPT generations + 143 curated
-SFW images from the Civitai public API (pixel-art LoRA models; provenance
-in `civitai_metadata.jsonl`). A strict domain re-curation excluded 17
-photographic / 3D-soft images that had no pixel grid at any pitch —
-they weren't fair tests in either direction; see `excluded.json` for the
-list with reasons.
+**99.1% (214/216) — the >95% goal is met.** Corpus: 78 of the user's own
+ChatGPT generations + 138 curated SFW images from the Civitai public API
+(pixel-art LoRA models; provenance in `civitai_metadata.jsonl`). 22 total
+exclusions (17 from a strict agent re-curation, 5 from the user's bench
+review — not pixel-art imitations); see `excluded.json` for every one with
+a reason.
 
-The 12 failures cluster into:
-- **~5 over-coarse picks** on dense fine-pitched art (no flat background).
-  Debugging shows the quality score is *flat* across pitches there — no
-  harmonic peak — so selection hinges on which candidate sizes happen to be
-  proposed. Next research step: bias selection toward finer pitch when the
-  score curve shows weak evidence (peakiness gate), validated against the
-  full corpus. Two more passes clear the 95% goal.
-- **~5 softly rendered / bloom-heavy sources** at the domain boundary
-  (visible pixel intent, soft execution). `--sharpen` visibly improves
-  them but is not auto-gated (no metric separates soft from crisp yet).
-- 2 other (mixed-scale detail, glitch streaks).
+Human review also settled the bloom/soft cluster: those reconstructions
+are faithful — the bloom belongs to the source — so they pass
+(`verdicts.json`). The 2 remaining failures are mixed-scale-detail cases
+(side profile, skull helmet) where the picked pitch is ~2x the finest
+structure; the "peakiness gate" research session targets exactly these.
+`--sharpen` remains available for bloom-heavy sources.

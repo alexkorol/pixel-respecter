@@ -240,7 +240,13 @@ def main() -> None:
             if not k.startswith("_")
         })
     if VERDICTS_PATH.exists():
-        human.update(json.loads(VERDICTS_PATH.read_text(encoding="utf-8")))
+        human.update({
+            k: v
+            for k, v in json.loads(
+                VERDICTS_PATH.read_text(encoding="utf-8")
+            ).items()
+            if not k.startswith("_")
+        })
 
     out_dir = args.out
     (out_dir / "panels").mkdir(parents=True, exist_ok=True)

@@ -168,5 +168,55 @@
     "source": "civitai",
     "reason": "smooth digital painting, no pixel grid",
     "excluded": "2026-07-10 strict domain re-curation"
+  },
+  {
+    "id": "22b28f4866e01d33",
+    "file": "images/22b28f4866e01d33.png",
+    "original_name": "civitai_112366534.png",
+    "width": 1792,
+    "height": 2304,
+    "source": "civitai",
+    "reason": "user review: not a pixel-art imitation",
+    "excluded": "2026-07-10 user bench review"
+  },
+  {
+    "id": "73a011aa4aef22de",
+    "file": "images/73a011aa4aef22de.png",
+    "original_name": "civitai_116142610.png",
+    "width": 1824,
+    "height": 1248,
+    "source": "civitai",
+    "reason": "user review: not a pixel-art imitation",
+    "excluded": "2026-07-10 user bench review"
+  },
+  {
+    "id": "a74e14a4ee337052",
+    "file": "images/a74e14a4ee337052.png",
+    "original_name": "civitai_111928981.png",
+    "width": 1024,
+    "height": 1024,
+    "source": "civitai",
+    "reason": "user review: not a pixel-art imitation",
+    "excluded": "2026-07-10 user bench review"
+  },
+  {
+    "id": "aa773562c122067b",
+    "file": "images/aa773562c122067b.png",
+    "original_name": "civitai_122976314.png",
+    "width": 832,
+    "height": 1216,
+    "source": "civitai",
+    "reason": "user review: not a pixel-art imitation",
+    "excluded": "2026-07-10 user bench review"
+  },
+  {
+    "id": "dffaeb33d2f330fe",
+    "file": "images/dffaeb33d2f330fe.png",
+    "original_name": "civitai_123535365.png",
+    "width": 1216,
+    "height": 960,
+    "source": "civitai",
+    "reason": "user review: not a pixel-art imitation",
+    "excluded": "2026-07-10 user bench review"
   }
 ]
