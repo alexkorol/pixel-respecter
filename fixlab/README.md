@@ -30,7 +30,12 @@ yellow boxes stay synchronized, and cell-vote decisions capture the 5x5
 corrected neighborhood plus a padded source-window reference. Automatic
 transparency is opt-in and removes only pixels of the adaptive dominant border
 color cluster that are connected to an image edge, preserving disconnected
-interior reuse. With transparency enabled, crop-on-save is enabled by default
+interior reuse. Step 4 also offers compact palette swatches plus color and hex
+inputs for manually choosing the exact border-connected transparency color.
+The default-on detached-speckle cleanup also removes small isolated components
+that resemble the chosen background while preserving the main sprite and
+interior color reuse; turn it off for intentional floating particles/effects.
+With transparency enabled, crop-on-save is enabled by default
 with a guaranteed one-pixel transparent buffer on all four sides. The export
 canvas grows beyond the generated grid when content touches an edge. The
 buffer is configurable. The editor and calibration coordinates

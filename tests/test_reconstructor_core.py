@@ -307,6 +307,40 @@ class TestColors:
         assert out[0, 0, 3] == 0
         assert out[3, 3, 3] == 255
 
+    def test_border_connected_transparency_accepts_manual_color(self):
+        img = np.full((6, 6, 3), [180, 20, 30], dtype=np.uint8)
+        img[0:3, 0] = [10, 80, 190]
+        img[1, 1] = [10, 80, 190]
+        img[4, 4] = [10, 80, 190]
+
+        out, background = color_ops.make_border_connected_transparent(
+            img, tolerance=0, background=(10, 80, 190)
+        )
+
+        assert background == (10, 80, 190)
+        assert out[0, 0, 3] == 0
+        assert out[1, 1, 3] == 0
+        assert out[4, 4, 3] == 255
+        assert out[0, 5, 3] == 255
+
+    def test_speckle_cleanup_removes_only_detached_background_like_islands(self):
+        img = np.full((12, 12, 3), [100, 105, 102], dtype=np.uint8)
+        img[4:9, 3:9] = [190, 70, 35]
+        img[6, 6] = [100, 105, 102]  # interior reuse within the main sprite
+        img[2, 9] = [108, 111, 109]  # detached background-like residue
+        img[1, 1] = [20, 80, 220]  # intentional detached foreground pixel
+
+        transparent, background = color_ops.make_border_connected_transparent(img)
+        cleaned, info = color_ops.remove_background_speckles(
+            transparent, background
+        )
+
+        assert cleaned[2, 9, 3] == 0
+        assert cleaned[6, 6, 3] == 255
+        assert cleaned[1, 1, 3] == 255
+        assert info["removed_cells"] == 1
+        assert info["removed_components"] == 1
+
     def test_border_connected_transparency_removes_noisy_color_cluster(self):
         img = np.full((9, 9, 3), (30, 36, 32), dtype=np.uint8)
         img[::2, ::2] = (38, 43, 39)

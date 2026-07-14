@@ -41,6 +41,39 @@ def test_fixlab_has_human_comparison_and_native_preview():
     assert 'id="exportSession"' in page
 
 
+def test_cell_inspector_puts_manual_picker_before_machine_votes():
+    page = (ROOT / "fixlab" / "index.html").read_text(encoding="utf-8")
+    assert "Pixel color deliberation" in page
+    assert 'id="freeColor"' in page
+    assert 'id="freeColorHex"' in page
+    assert 'id="freeColorReadout"' in page
+    assert page.index('id="freeColor"') < page.index('id="votes"')
+    assert '$("cellSource").onclick' in page
+
+
+def test_palette_groups_compact_swatches_by_color_family():
+    page = (ROOT / "fixlab" / "index.html").read_text(encoding="utf-8")
+    assert 'id="paletteSummary"' in page
+    assert "orderPaletteEntries(entries)" in page
+    assert "colorFamilyKey(color)" in page
+    assert "repeat(auto-fill,minmax(30px,1fr))" in page
+    assert "content:attr(data-order)" in page
+    assert "Merge 2 into 1" in page
+
+
+def test_background_step_offers_manual_transparency_color():
+    page = (ROOT / "fixlab" / "index.html").read_text(encoding="utf-8")
+    assert 'id="transparencyPalette"' in page
+    assert 'id="transparencyColor"' in page
+    assert 'id="transparencyColorHex"' in page
+    assert 'id="applyTransparencyColor"' in page
+    assert 'id="removeSpeckles"' in page
+    assert "manual_transparency(color,cleanup=True)" in page
+    assert "manual_exact_color_connected_to_edge" in page
+    assert "speckle_cleanup" in page
+    assert "Only matching cells connected to an edge are removed." in page
+
+
 def test_generated_regressions_skip_incomplete_calibrations(tmp_path, monkeypatch):
     corpus = tmp_path / "wild_corpus"
     fixes = corpus / "fixes"
