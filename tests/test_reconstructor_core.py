@@ -123,6 +123,33 @@ class TestDownsampleMode:
         out = grid_ops.downsample_mode(labels, palette, 7, (2, 4))
         assert np.array_equal(out, art[1:, 1:])
 
+    def test_cell_vote_table_matches_reconstruction_and_margin(self):
+        labels = np.zeros((6, 6), dtype=np.int32)
+        labels[1:5, 1:5] = np.array([
+            [1, 1, 1, 2],
+            [1, 1, 2, 2],
+            [1, 2, 2, 2],
+            [1, 1, 1, 2],
+        ], dtype=np.int32)
+        palette = np.array([
+            [0, 0, 0], [200, 20, 30], [20, 180, 40]
+        ], dtype=np.uint8)
+
+        table = grid_ops.cell_vote_table(
+            labels, palette, 6, (0, 0), 0, 0, trim_margin=True
+        )
+        out = grid_ops.downsample_mode(
+            labels, palette, 6, (0, 0), trim_margin=True
+        )
+
+        assert table["margin"] == 1
+        assert table["total"] == 16
+        assert table["winner"] == 1
+        assert table["candidates"][0]["count"] == 9
+        assert table["candidates"][1]["count"] == 7
+        assert table["vote_margin"] == pytest.approx(2 / 16)
+        assert np.array_equal(out[0, 0], palette[table["winner"]])
+
 
 class TestGridQualityScore:
     def test_native_size_beats_harmonics(self):
@@ -270,6 +297,48 @@ class TestColors:
         assert out.shape[2] == 4
         assert out[0, 0, 3] == 0
         assert out[4, 4, 3] == 255
+
+    def test_border_connected_transparency_preserves_interior_reuse(self):
+        img = np.zeros((7, 7, 3), dtype=np.uint8)
+        img[1:6, 1:6] = (220, 80, 40)
+        img[3, 3] = (0, 0, 0)  # same RGB as background, but disconnected
+        out, background = color_ops.make_border_connected_transparent(img)
+        assert background == (0, 0, 0)
+        assert out[0, 0, 3] == 0
+        assert out[3, 3, 3] == 255
+
+    def test_border_connected_transparency_removes_noisy_color_cluster(self):
+        img = np.full((9, 9, 3), (30, 36, 32), dtype=np.uint8)
+        img[::2, ::2] = (38, 43, 39)
+        img[3:6, 3:6] = (210, 80, 30)
+        out, _ = color_ops.make_border_connected_transparent(img)
+        assert np.all(out[0, :, 3] == 0)
+        assert np.all(out[:, 0, 3] == 0)
+        assert np.all(out[3:6, 3:6, 3] == 255)
+
+    def test_crop_transparent_border_reports_original_grid_bounds(self):
+        rgba = np.zeros((10, 12, 4), dtype=np.uint8)
+        rgba[3:7, 4:9] = (120, 80, 30, 255)
+        cropped, bounds = color_ops.crop_transparent_border(rgba, padding=1)
+        assert bounds == (3, 2, 10, 8)
+        assert cropped.shape == (6, 7, 4)
+        assert np.array_equal(cropped, rgba[2:8, 3:10])
+
+    def test_crop_transparent_border_keeps_rgb_canvas(self):
+        rgb = np.zeros((5, 7, 3), dtype=np.uint8)
+        cropped, bounds = color_ops.crop_transparent_border(rgb, padding=3)
+        assert bounds == (0, 0, 7, 5)
+        assert np.array_equal(cropped, rgb)
+
+    def test_crop_padding_is_guaranteed_past_original_edges(self):
+        rgba = np.zeros((4, 5, 4), dtype=np.uint8)
+        rgba[0:3, 1:5] = (80, 140, 200, 255)  # opaque at top and right edges
+        cropped, bounds = color_ops.crop_transparent_border(rgba, padding=1)
+        assert bounds == (0, -1, 6, 4)
+        assert cropped.shape == (5, 6, 4)
+        assert np.all(cropped[0, :, 3] == 0)
+        assert np.all(cropped[:, -1, 3] == 0)
+        assert np.all(cropped[-1, :, 3] == 0)
 
     def test_quantize_image_reduces_palette(self):
         rng = np.random.default_rng(3)

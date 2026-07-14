@@ -8,7 +8,7 @@ detection follow Kenneth J. Allen's *proper-pixel-art*
 
 from __future__ import annotations
 
-from collections import Counter
+from collections import Counter, deque
 from typing import Optional, Tuple
 
 import numpy as np
@@ -148,6 +148,108 @@ def make_background_transparent(img: np.ndarray) -> np.ndarray:
     matches = np.all(rgba[:, :, :3] == np.array(bg, dtype=np.uint8), axis=-1)
     rgba[matches, 3] = 0
     return rgba
+
+
+def make_border_connected_transparent(
+    img: np.ndarray,
+    tolerance: Optional[float] = None,
+) -> Tuple[np.ndarray, Tuple[int, int, int]]:
+    """Make the border-connected dominant-color cluster transparent.
+
+    Unlike :func:`make_background_transparent`, this preserves disconnected
+    interior pixels that happen to reuse the background color. That is safer
+    for item/NPC sprites where a dark background can also appear in outlines
+    or internal details. By default the RGB tolerance adapts to the 90th
+    percentile of border variation, which removes dithered/noisy generated
+    backgrounds rather than only one exact palette entry.
+    """
+    h, w = img.shape[:2]
+    if h < 1 or w < 1:
+        raise ValueError("image must contain at least one pixel")
+    if img.shape[2] == 4:
+        rgba = img.copy()
+    else:
+        rgba = np.dstack([img[:, :, :3], np.full((h, w), 255, dtype=np.uint8)])
+    bg = most_common_boundary_color(rgba)
+    rgb = rgba[:, :, :3].astype(np.float32)
+    center = np.asarray(bg, dtype=np.float32)
+    border = np.concatenate([
+        rgb[0, :], rgb[-1, :], rgb[1:-1, 0], rgb[1:-1, -1],
+    ])
+    border_distance = np.sqrt(np.sum((border - center) ** 2, axis=1))
+    if tolerance is None:
+        tolerance = min(
+            64.0,
+            max(2.0, float(np.percentile(border_distance, 90)) + 2.0),
+        )
+    tolerance = max(0.0, float(tolerance))
+    distance = np.sqrt(np.sum((rgb - center) ** 2, axis=2))
+    matches = distance <= tolerance
+    connected = np.zeros((h, w), dtype=bool)
+    pending = deque()
+    for x in range(w):
+        pending.append((0, x))
+        if h > 1:
+            pending.append((h - 1, x))
+    for y in range(1, h - 1):
+        pending.append((y, 0))
+        if w > 1:
+            pending.append((y, w - 1))
+    while pending:
+        y, x = pending.popleft()
+        if connected[y, x] or not matches[y, x]:
+            continue
+        connected[y, x] = True
+        if y > 0:
+            pending.append((y - 1, x))
+        if y + 1 < h:
+            pending.append((y + 1, x))
+        if x > 0:
+            pending.append((y, x - 1))
+        if x + 1 < w:
+            pending.append((y, x + 1))
+    rgba[:, :, 3] = np.where(connected, 0, 255).astype(np.uint8)
+    return rgba, bg
+
+
+def crop_transparent_border(
+    img: np.ndarray, padding: int = 0
+) -> Tuple[np.ndarray, Tuple[int, int, int, int]]:
+    """Crop an RGBA sprite to its opaque bounds plus cell padding.
+
+    Returns ``(cropped, (x0, y0, x1, y1))`` using half-open bounds in the
+    original 1x grid. RGB inputs have no transparent border and therefore
+    return unchanged. Fully transparent inputs also remain unchanged so a
+    mistaken transparency choice never collapses a sprite to an empty image.
+    """
+    image = np.asarray(img)
+    if image.ndim != 3 or image.shape[2] not in (3, 4):
+        raise ValueError("expected an HxWx3 or HxWx4 image")
+    h, w = image.shape[:2]
+    if h < 1 or w < 1:
+        raise ValueError("image must contain at least one pixel")
+    if image.shape[2] != 4:
+        return image.copy(), (0, 0, w, h)
+    opaque_y, opaque_x = np.nonzero(image[:, :, 3] > 0)
+    if len(opaque_x) == 0:
+        return image.copy(), (0, 0, w, h)
+    padding = max(0, int(padding))
+    # Bounds intentionally may extend beyond the original canvas. Production
+    # sprites need the requested transparent buffer even when opaque content
+    # touches a generated edge.
+    x0 = int(opaque_x.min()) - padding
+    y0 = int(opaque_y.min()) - padding
+    x1 = int(opaque_x.max()) + 1 + padding
+    y1 = int(opaque_y.max()) + 1 + padding
+    cropped = np.zeros((y1 - y0, x1 - x0, image.shape[2]), dtype=image.dtype)
+    src_x0, src_y0 = max(0, x0), max(0, y0)
+    src_x1, src_y1 = min(w, x1), min(h, y1)
+    dst_x0, dst_y0 = src_x0 - x0, src_y0 - y0
+    cropped[
+        dst_y0 : dst_y0 + (src_y1 - src_y0),
+        dst_x0 : dst_x0 + (src_x1 - src_x0),
+    ] = image[src_y0:src_y1, src_x0:src_x1]
+    return cropped, (x0, y0, x1, y1)
 
 
 def flatten_alpha(

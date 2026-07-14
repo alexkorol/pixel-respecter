@@ -91,6 +91,78 @@ def cell_margin(cell: int) -> int:
     return max(1, min(cell // 6, (cell - 1) // 2))
 
 
+def cell_vote_table(
+    labels: np.ndarray,
+    palette: np.ndarray,
+    cell: int,
+    offset: Tuple[int, int],
+    row: int,
+    column: int,
+    trim_margin: bool = True,
+) -> dict:
+    """Return the modal-vote candidates for one reconstruction cell.
+
+    The inspected pixels and trimming rule are exactly those used by
+    :func:`downsample_mode`.  The result is deliberately JSON-friendly so
+    browser tools can capture the decision context without reimplementing
+    reconstruction. Candidates are sorted by vote count, then palette label.
+
+    This function is introspection-only: it does not mutate labels, palette,
+    or any reconstruction state.
+    """
+    cell = int(cell)
+    view = _cell_view(labels, cell, offset)
+    gh, gw = int(view.shape[0]), int(view.shape[2])
+    row, column = int(row), int(column)
+    if not (0 <= row < gh and 0 <= column < gw):
+        raise IndexError(
+            f"cell ({row}, {column}) outside reconstruction {gh}x{gw}"
+        )
+
+    margin = cell_margin(cell) if trim_margin else 0
+    if margin and cell - 2 * margin >= 1:
+        pixels = view[
+            row, margin : cell - margin,
+            column, margin : cell - margin,
+        ]
+    else:
+        margin = 0
+        pixels = view[row, :, column, :]
+
+    # np.intp is required by np.bincount on wasm32/Pyodide.
+    counts = np.bincount(
+        pixels.reshape(-1).astype(np.intp, copy=False),
+        minlength=len(palette),
+    )
+    used = np.flatnonzero(counts)
+    ordered = sorted(used.tolist(), key=lambda label: (-counts[label], label))
+    total = int(counts.sum())
+    ox, oy = (int(offset[0]), int(offset[1]))
+    x0, y0 = ox + column * cell, oy + row * cell
+    candidates = [
+        {
+            "label": int(label),
+            "color": [int(channel) for channel in palette[label, :3]],
+            "count": int(counts[label]),
+            "share": float(counts[label] / total) if total else 0.0,
+        }
+        for label in ordered
+    ]
+    return {
+        "row": row,
+        "column": column,
+        "source_bounds": [x0, y0, x0 + cell, y0 + cell],
+        "margin": margin,
+        "total": total,
+        "winner": candidates[0]["label"] if candidates else None,
+        "vote_margin": (
+            candidates[0]["share"]
+            - (candidates[1]["share"] if len(candidates) > 1 else 0.0)
+        ) if candidates else 0.0,
+        "candidates": candidates,
+    }
+
+
 def downsample_mode(
     labels: np.ndarray,
     palette: np.ndarray,

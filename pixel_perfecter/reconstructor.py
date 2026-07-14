@@ -558,7 +558,15 @@ class PixelArtReconstructor:
         for kind, candidate_mesh, pitch in mesh_candidates:
             mesh_score = mesh_ops.mesh_quality_score(img, candidate_mesh)
             self.last_fit_debug["mesh_candidates"].append(
-                {"kind": kind, "pitch": pitch, "score": mesh_score}
+                {
+                    "kind": kind,
+                    "pitch": pitch,
+                    "score": mesh_score,
+                    "lines": [
+                        [int(value) for value in candidate_mesh[0]],
+                        [int(value) for value in candidate_mesh[1]],
+                    ],
+                }
             )
             if self.debug:
                 print(

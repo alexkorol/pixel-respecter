@@ -33,12 +33,44 @@ CORPUS_DIR = Path(__file__).resolve().parent / "wild_corpus"
 MANIFEST_PATH = CORPUS_DIR / "manifest.json"
 VERDICTS_PATH = CORPUS_DIR / "verdicts.json"          # human, final say
 AGENT_VERDICTS_PATH = CORPUS_DIR / "verdicts_agent.json"  # AI visual QC
+GROUND_TRUTH_DIR = CORPUS_DIR / "ground_truth"
 
 PANEL = 300
 # Auto-verdict thresholds (heuristics, human verdicts override):
 MIN_CELL = 3          # detected pitch below this = grid not really found
 SUSPECT_CORE_DIFF = 12.0   # % tolerant core diff above this = suspect
 FAIL_CORE_DIFF = 30.0      # ... above this = fail
+
+
+def exact_cell_accuracy(result: np.ndarray, ground_truth: np.ndarray) -> float:
+    """Exact RGB accuracy over the union of two 1x cell grids.
+
+    Missing or extra rows/columns count as incorrect cells. There is no
+    tolerance: this is calibration truth, not a perceptual quality score.
+    """
+    def _canonical_rgba(image: np.ndarray) -> np.ndarray:
+        image = np.asarray(image)
+        if image.shape[2] >= 4:
+            rgba = image[:, :, :4].copy()
+        else:
+            alpha = np.full(image.shape[:2] + (1,), 255, dtype=np.uint8)
+            rgba = np.concatenate([image[:, :, :3], alpha], axis=2)
+        rgba[rgba[:, :, 3] == 0, :3] = 0
+        return rgba
+
+    result = _canonical_rgba(result)
+    ground_truth = _canonical_rgba(ground_truth)
+    height = max(result.shape[0], ground_truth.shape[0])
+    width = max(result.shape[1], ground_truth.shape[1])
+    if height == 0 or width == 0:
+        return 0.0
+    overlap_h = min(result.shape[0], ground_truth.shape[0])
+    overlap_w = min(result.shape[1], ground_truth.shape[1])
+    exact = np.all(
+        result[:overlap_h, :overlap_w] == ground_truth[:overlap_h, :overlap_w],
+        axis=-1,
+    )
+    return 100.0 * float(exact.sum()) / float(height * width)
 
 
 def draw_grid(img: Image.Image, rec: PixelArtReconstructor) -> Image.Image:
@@ -80,6 +112,7 @@ def evaluate_entry(entry: dict, out_dir: Path) -> dict:
             reason=f"exception: {exc}",
             cell_size="", grid_kind="", output_size="",
             core_diff_tol="", warnings="", seconds="",
+            ground_truth_accuracy="", ground_truth_shape_match="",
         )
         return row
 
@@ -112,7 +145,18 @@ def evaluate_entry(entry: dict, out_dir: Path) -> dict:
         core_diff_tol=round(core_diff, 2),
         warnings="; ".join(warnings),
         seconds=round(elapsed, 2),
+        ground_truth_accuracy="",
+        ground_truth_shape_match="",
     )
+
+    truth_path = GROUND_TRUTH_DIR / f"{entry['id']}.png"
+    if truth_path.exists():
+        with Image.open(truth_path) as truth_image:
+            truth = np.asarray(truth_image.convert("RGBA"))
+        row["ground_truth_accuracy"] = round(
+            exact_cell_accuracy(result, truth), 4
+        )
+        row["ground_truth_shape_match"] = result.shape[:2] == truth.shape[:2]
 
     # Panel: original | grid overlay | reconstruction (NN back to source size)
     recon_img = Image.fromarray(result)
@@ -142,6 +186,7 @@ def render_html(rows: list, human: dict, out_dir: Path) -> None:
     cell={escape(str(r['cell_size']))} ({escape(str(r['grid_kind']))})
     &nbsp; 1x={escape(str(r['output_size']))}
     &nbsp; core diff={escape(str(r['core_diff_tol']))}%
+    {('&nbsp; exact ground truth=' + escape(str(r.get('ground_truth_accuracy', ''))) + '%') if r.get('ground_truth_accuracy', '') != '' else ''}
     &nbsp; {escape(str(r['seconds']))}s<br>
     auto: <span class="badge b-{escape(r['auto_verdict'])}">{escape(r['auto_verdict'])}</span>
     {('&mdash; ' + escape(str(r['reason']))) if r['reason'] else ''}
@@ -260,12 +305,14 @@ def main() -> None:
         print(
             f"[{i:3d}/{len(entries)}] {effective:7s} cell={str(row['cell_size']):>4s} "
             f"{str(row['grid_kind']):5s} diff={str(row['core_diff_tol']):>6s}% "
+            f"gt={str(row.get('ground_truth_accuracy', '')):>8s}% "
             f"{row['name'][:52]}"
         )
 
     fields = ["id", "name", "source", "input_size", "auto_verdict", "reason",
               "cell_size", "grid_kind", "output_size", "core_diff_tol",
-              "warnings", "seconds"]
+              "warnings", "seconds", "ground_truth_accuracy",
+              "ground_truth_shape_match"]
     report_path = out_dir / "report.csv"
     if args.only and report_path.exists():
         # Partial re-run: merge into the existing report, don't clobber it.
