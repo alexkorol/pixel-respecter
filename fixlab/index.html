@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fix Lab · Pixel Perfecter calibration</title>
+<style>
+:root{color-scheme:dark;--bg:#111318;--card:#1a1e27;--line:#343b4d;--ink:#eef1f8;--muted:#9ca6ba;--hot:#ff4d82;--ok:#52d273;--accent:#7c8cff}
+*{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,sans-serif} header{padding:18px 22px;border-bottom:1px solid var(--line);position:sticky;top:0;background:#111318ee;backdrop-filter:blur(10px);z-index:10}h1{font-size:20px;margin:0}header p{margin:2px 0 0;color:var(--muted)}main{padding:18px;max-width:1500px;margin:auto}.toolbar,.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.toolbar{margin-bottom:16px}select,button,input{font:inherit;color:var(--ink);background:#222734;border:1px solid var(--line);border-radius:7px;padding:7px 10px}button{cursor:pointer}button:hover{border-color:var(--accent)}button:disabled{opacity:.45;cursor:default}.primary{background:#3946a0}.complete{background:#176b36}.status{color:var(--muted)}.layout{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:16px}.card{background:var(--card);border:1px solid var(--line);border-radius:11px;padding:14px;margin-bottom:14px}.card h2{font-size:15px;margin:0 0 6px}.candidate-intro{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:10px}.machine-details{font-size:12px;color:var(--muted)}.machine-details summary{cursor:pointer;color:#aab4c8}.candidate-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:10px}.candidate{padding:8px;text-align:left}.candidate.selected{outline:2px solid var(--ok)}.candidate img{display:block;width:100%;aspect-ratio:1;object-fit:contain;image-rendering:pixelated;background:#101218}.candidate .option-name{display:block;margin-top:6px;font-weight:650}.candidate small{display:block;color:var(--muted);margin-top:2px}.scrub{margin-top:12px}.scrub input{width:min(520px,80%)}.compare-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px}.compare-head h2{margin:0}.compare-grid{display:grid;grid-template-columns:minmax(260px,1fr) minmax(260px,1fr) minmax(150px,180px);gap:12px;align-items:start}.compare-panel{min-width:0}.compare-label{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:6px}.compare-label strong{font-size:13px}.compare-label span{font-size:11px;color:var(--muted)}.compare-stage{display:flex;align-items:center;justify-content:center;min-height:260px;overflow:hidden;border:1px solid #2a3040;border-radius:8px;background:#0d0f14}.compare-stage canvas{display:block;max-width:100%;height:auto}.compare-stage #sourceCanvas{width:100%;cursor:default}.compare-stage #sourceCanvas.nudge-ready{cursor:ew-resize}.compare-stage #artCanvas{width:100%;image-rendering:pixelated;cursor:crosshair}.native-panel{height:100%}.native-stage{display:flex;align-items:center;justify-content:center;min-height:260px;padding:12px;overflow:auto;border:1px solid #2a3040;border-radius:8px;background:repeating-conic-gradient(#161a22 0% 25%,#202530 0% 50%) 0 0/12px 12px}.native-stage canvas{display:block;width:auto;height:auto;max-width:none;image-rendering:pixelated;box-shadow:0 0 0 1px #ffffff22}.compare-help{display:flex;justify-content:space-between;gap:12px;margin-top:9px}.mesh-toggle{display:flex;gap:7px;align-items:center;white-space:nowrap;color:var(--muted);font-size:12px}.mesh-toggle input{accent-color:var(--hot)}.inspector{display:grid;grid-template-columns:180px 1fr;gap:12px}.inspector img{width:180px;height:180px;object-fit:fill;image-rendering:pixelated;background:#0d0f14;cursor:crosshair}.manual-color{margin:12px 0;padding:12px;border:1px solid #46506a;border-radius:9px;background:#141927}.manual-color-copy{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:8px}.manual-color-copy strong{font-size:13px}.manual-color-picker{display:flex;align-items:center;gap:8px;min-width:170px}.manual-color-picker input[type=color]{width:52px;height:38px;padding:2px;cursor:pointer}.manual-color-picker span{font:12px/1.35 ui-monospace,monospace;color:#c5cee0}.manual-hex{width:100px;font:13px/1.2 ui-monospace,monospace;text-transform:uppercase}.manual-hex[aria-invalid=true]{border-color:var(--hot)}.vote-heading{display:flex;justify-content:space-between;gap:12px;margin:8px 0 6px}.votes{max-height:340px;overflow:auto;padding-right:3px}.vote{display:flex;align-items:center;gap:8px;width:100%;margin-bottom:5px;text-align:left}.swatch{width:22px;height:22px;border:1px solid #ffffff44;border-radius:4px;display:inline-block;flex:none}.queue{max-height:360px;overflow:auto}.queue button{display:block;width:100%;text-align:left;margin:4px 0}.queue .margin{float:right;color:var(--muted)}.palette{display:grid;grid-template-columns:repeat(auto-fill,minmax(30px,1fr));gap:4px}.palette button{position:relative;min-width:30px;height:30px;padding:0;border-radius:5px}.palette button.on{outline:2px solid white;outline-offset:1px}.palette button.on::after{content:attr(data-order);position:absolute;right:2px;bottom:2px;display:grid;place-items:center;width:15px;height:15px;border-radius:50%;background:#080a0f;color:white;font:bold 10px/1 system-ui;box-shadow:0 0 0 1px #ffffff99}.palette-summary{margin:-2px 0 7px;color:#b9c2d4;font-size:11px}.log{font:11px/1.4 ui-monospace,monospace;max-height:220px;overflow:auto;white-space:pre-wrap;color:#bbc3d3}.log-details summary{cursor:pointer;font-weight:650}.hidden{display:none!important}.hint{color:var(--muted);font-size:12px}.uncertain{color:#ffca64}.good{color:var(--ok)}@media(max-width:1200px){.compare-grid{grid-template-columns:repeat(2,minmax(240px,1fr))}.native-panel{grid-column:1/-1}.native-stage{min-height:150px;justify-content:flex-start}}@media(max-width:900px){.layout{grid-template-columns:1fr}.inspector{grid-template-columns:1fr}.inspector img{width:100%;height:auto}.manual-color-copy{display:block}}@media(max-width:650px){.compare-grid{grid-template-columns:1fr}.native-panel{grid-column:auto}.compare-stage{min-height:220px}.compare-head,.compare-help,.candidate-intro{display:block}.mesh-toggle{margin-top:8px}.machine-details{margin-top:8px}}
+</style>
+<style>
+.compare-stage #sourceCanvas{cursor:crosshair}
+.compare-panel:nth-child(2) .compare-stage{background:repeating-conic-gradient(#11151c 0% 25%,#1c222d 0% 50%) 0 0/16px 16px}
+.mesh-toggle,.toggle-row{display:flex;gap:7px;align-items:center;color:var(--muted);font-size:12px}
+.mesh-toggle{white-space:nowrap}.mesh-toggle input,.toggle-row input{accent-color:var(--hot)}
+.pathbox{padding:8px;margin:9px 0;border-radius:6px;background:#11151d;color:#aeb8ca;font:11px/1.5 ui-monospace,monospace;overflow-wrap:anywhere}
+.session-summary{color:var(--ok);margin-top:8px}
+.transparency-manual{margin:12px 0;padding:12px;border:1px solid #3b455d;border-radius:9px;background:#141927}
+.transparency-heading{display:flex;justify-content:space-between;gap:12px;align-items:baseline;margin-bottom:7px}
+.transparency-palette{margin:7px 0 10px}
+.transparency-palette button.chosen{outline:2px solid var(--hot);outline-offset:1px}
+</style>
+</head>
+<body>
+<header><h1>Fix Lab</h1><p>Every correction is captured as calibration context from the real reconstruction engine.</p></header>
+<main>
+  <div class="toolbar">
+    <select id="imageSelect"><option>Loading corpus…</option></select>
+    <button id="loadCorpus" class="primary" disabled>Load corpus image</button>
+    <label><input id="file" type="file" accept="image/*"> or choose a file</label>
+    <span id="status" class="status">Loading Pyodide…</span>
+  </div>
+  <div id="workspace" class="hidden">
+    <section class="card">
+      <div class="candidate-intro"><div><h2>1 · Choose the best-looking reconstruction</h2><div class="hint">Pick the version that preserves the shape and detail you expect. The machine score is only a suggestion.</div></div><details class="machine-details"><summary>Why this image needs review</summary><div id="imageUncertainty"></div></details></div>
+      <div id="candidates" class="candidate-grid"></div>
+      <div class="scrub row"><label>Scrub machine candidates <input id="scrub" type="range" min="0" max="0" value="0"></label><span id="scrubLabel"></span></div>
+    </section>
+    <div class="layout">
+      <div>
+        <section class="card comparison-card">
+          <div class="compare-head"><div><h2>2 · Compare and correct</h2><div class="hint">Judge the silhouette and color read first; inspect machine details only when something looks wrong.</div></div><label class="mesh-toggle"><input id="showGrid" type="checkbox"> Show mesh lines for nudging</label></div>
+          <div class="compare-grid">
+            <div class="compare-panel"><div class="compare-label"><strong>Original</strong><span id="sourceSize"></span></div><div class="compare-stage"><canvas id="sourceCanvas"></canvas></div></div>
+            <div class="compare-panel"><div class="compare-label"><strong>Pixel-perfected · enlarged</strong><span id="outputSize"></span></div><div class="compare-stage"><canvas id="artCanvas"></canvas></div></div>
+            <div class="compare-panel native-panel"><div class="compare-label"><strong>Actual 1× export</strong><span id="nativeSize">1 canvas pixel = 1 screen pixel</span></div><div class="native-stage"><canvas id="nativeCanvas"></canvas></div></div>
+          </div>
+          <div class="compare-help"><span class="hint">Click either image to select a cell. A yellow box keeps both views synchronized.</span><span id="meshHint" class="hint">Turn on mesh lines to drag a boundary over the original.</span></div>
+        </section>
+        <section id="inspectorCard" class="card hidden">
+          <h2>Pixel color deliberation</h2>
+          <div class="inspector">
+            <div><img id="cellSource" alt="magnified source around selected cell" title="Click to sample a source color"><div class="hint">Click the enlarged source preview to sample any color.</div></div>
+            <div>
+              <div id="cellMeta"></div>
+              <div class="manual-color">
+                <div class="manual-color-copy"><strong>Manual color</strong><span id="manualColorStatus" class="hint">Starts from the selected pixel's current color.</span></div>
+                <div class="row">
+                  <label class="manual-color-picker"><input id="freeColor" type="color" value="#ff00ff" aria-label="Choose manual pixel color"><span id="freeColorReadout">#FF00FF · rgb(255, 0, 255)</span></label>
+                  <input id="freeColorHex" class="manual-hex" type="text" value="#FF00FF" maxlength="7" spellcheck="false" aria-label="Manual color hex value">
+                  <button id="freehand" class="primary">Paint selected pixel</button>
+                </div>
+              </div>
+              <div class="vote-heading"><strong>Machine suggestions</strong><span class="hint">Choose one to log a vote correction.</span></div>
+              <div id="votes" class="votes"></div>
+            </div>
+          </div>
+        </section>
+        <section class="card"><h2>3 · Simplify colors</h2><div class="hint">Choose the color to keep first, then the similar color it should replace.</div><div id="paletteSummary" class="palette-summary">Grouped by color family.</div><div id="palette" class="palette"></div><div class="row" style="margin-top:8px"><button id="merge" disabled>Merge 2 into 1</button><span id="mergeHint" class="hint">Select two colors.</span></div></section>
+        <section class="card">
+          <h2>4 · Background and crop</h2>
+          <label class="toggle-row"><input id="autoTransparency" type="checkbox"> Automatically find the border-connected background color</label>
+          <label class="toggle-row" style="margin-top:8px"><input id="removeSpeckles" type="checkbox" checked> Clean small detached background-colored speckles</label>
+          <div class="transparency-manual">
+            <div class="transparency-heading"><strong>Transparency color</strong><span class="hint">Only matching cells connected to an edge are removed.</span></div>
+            <div id="transparencyPalette" class="palette transparency-palette" aria-label="Current colors available for transparency"></div>
+            <div class="row">
+              <label class="manual-color-picker"><input id="transparencyColor" type="color" value="#ff00ff" aria-label="Choose transparency color"><span id="transparencyColorReadout">#FF00FF · rgb(255, 0, 255)</span></label>
+              <input id="transparencyColorHex" class="manual-hex" type="text" value="#FF00FF" maxlength="7" spellcheck="false" aria-label="Transparency color hex value">
+              <button id="applyTransparencyColor" class="primary">Make border color transparent</button>
+              <button id="clearTransparency" disabled>Turn transparency off</button>
+            </div>
+          </div>
+          <label class="toggle-row"><input id="autoCrop" type="checkbox" checked disabled> Crop transparent border on save</label>
+          <label class="toggle-row" style="margin-top:8px">Transparent buffer <input id="cropPadding" type="number" min="0" max="16" value="1" disabled style="width:64px"> pixels</label>
+          <p id="transparencyStatus" class="hint">Off. Best for tiles, paintings, and full-frame art.</p><p id="cropStatus" class="hint">Enable transparency to measure and crop the sprite content.</p>
+        </section>
+      </div>
+      <aside>
+        <section class="card"><h2>Needs attention</h2><p class="hint">Cells where two or more colors received nearly equal support.</p><div id="queue" class="queue"></div></section>
+        <section class="card"><h2>Finish</h2><div id="savePaths" class="pathbox"></div><div class="row"><button id="complete" class="complete">Save corrected sprite</button><button id="saveNext">Save &amp; next</button></div><div class="row" style="margin-top:7px"><button id="exportLog">Export this sprite</button><button id="exportSession">Export session backup</button></div><div id="sessionSummary" class="session-summary">0 sprites saved this session</div><p id="persist" class="hint">Calibration decisions save immediately; the corrected PNG saves when you use a save button.</p></section>
+        <details class="card log-details"><summary>Calibration log</summary><div id="log" class="log">No decisions yet.</div></details>
+      </aside>
+    </div>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/pyodide/v0.26.2/full/pyodide.js"></script>
+<script>
+const $=id=>document.getElementById(id), MODULES=["__init__","grid","mesh","colors","reconstructor","palettes"];
+let pyodide, imageId="", decisions=[], sessionDecisions=[], sessionSaved=new Set(), analysis=null, current=null, selectedCell=null, paletteSelection=[], transparencyMode="off", transparencyColorTouched=false, sourceImage=new Image(), artImage=new Image(), nativeImage=new Image(), drag=null, sourcePointerDown=null;
+const PY=String.raw`
+import sys,io,json,base64
+sys.path.insert(0,"/app")
+import numpy as np
+from PIL import Image
+from pixel_perfecter.reconstructor import PixelArtReconstructor
+from pixel_perfecter import colors as color_ops, grid as grid_ops, mesh as mesh_ops
+
+SRC=LABELS=PALETTE=ART=GEOM=FIT=None
+OPTIONS=[]
+PROJ_X=PROJ_Y=None
+EXPORT_CROP_ENABLED=False
+EXPORT_CROP_PADDING=1
+EXPORT_CROP_BOUNDS=None
+
+def _png(arr):
+    buf=io.BytesIO(); Image.fromarray(np.asarray(arr,dtype=np.uint8)).save(buf,format="PNG")
+    return base64.b64encode(buf.getvalue()).decode()
+
+def _candidate_art(option):
+    if option["kind"]=="mesh":
+        lines=option["lines"]
+        return mesh_ops.downsample_mesh(LABELS,PALETTE,(lines[0],lines[1]))
+    return grid_ops.downsample_mode(LABELS,PALETTE,int(option["size"]),tuple(option["offset"]))
+
+def analyze(data,image_id):
+    global SRC,LABELS,PALETTE,ART,GEOM,FIT,OPTIONS,PROJ_X,PROJ_Y
+    SRC=np.array(Image.open(io.BytesIO(bytes(data))).convert("RGB"))
+    LABELS,PALETTE=grid_ops.label_image(SRC)
+    PROJ_X,PROJ_Y=grid_ops.diff_projections(SRC)
+    rec=PixelArtReconstructor(image=SRC); rec.run("global"); FIT=rec.last_fit_debug
+    rigid=[dict(kind="rigid",key=f"r:{c['size']}:{c['offset'][0]}:{c['offset'][1]}",label=f"{c['size']}px rigid",size=c['size'],pitch=float(c['size']),offset=c['offset'],score=c['score'],variance=c['variance'],source=c['source']) for c in FIT["candidates"] if not c["gated_out"]][:4]
+    meshes=sorted(FIT.get("mesh_candidates",[]),key=lambda c:c["score"],reverse=True)
+    mesh=[dict(kind="mesh",key=f"m:{i}",label=f"{c['pitch']:.2f}px {c['kind']} mesh",size=int(round(c['pitch'])),pitch=float(c['pitch']),offset=[c['lines'][0][0],c['lines'][1][0]],score=c['score'],variance=None,source=c['kind'],lines=c['lines']) for i,c in enumerate(meshes[:4])]
+    machine=next((x for x in rigid if x["size"]==FIT["final_pick"]["size"]),rigid[0] if rigid else None)
+    pool=[]
+    for x in ([machine] if machine else [])+mesh+rigid:
+        if x and x["key"] not in [p["key"] for p in pool]: pool.append(x)
+        if len(pool)>=5: break
+    OPTIONS=pool
+    rendered=[]
+    for option in OPTIONS:
+        art=_candidate_art(option)
+        rendered.append({**option,"png":_png(art),"width":int(art.shape[1]),"height":int(art.shape[0])})
+    peak=float(FIT.get("rigid_pick",{}).get("score",0)); med=float(FIT.get("median_score",0))
+    uncertainty={"peaked":bool(FIT.get("peaked")),"peak_to_median":peak/med if med else 0.0,"harmonic_ambiguous":any(abs(x["pitch"]*2-(machine or x)["pitch"])<1.5 for x in mesh)}
+    return json.dumps({"id":image_id,"source_png":_png(SRC),"source_width":int(SRC.shape[1]),"source_height":int(SRC.shape[0]),"options":rendered,"fit_debug":FIT,"uncertainty":uncertainty})
+
+def _bounds(row,col):
+    if GEOM["kind"]=="mesh":
+        xs,ys=GEOM["lines"]; return int(xs[col]),int(ys[row]),int(xs[col+1]),int(ys[row+1])
+    cell=int(GEOM["size"]); ox,oy=GEOM["offset"]
+    return int(ox+col*cell),int(oy+row*cell),int(ox+(col+1)*cell),int(oy+(row+1)*cell)
+
+def _table(row,col):
+    if GEOM["kind"]=="rigid":
+        return grid_ops.cell_vote_table(LABELS,PALETTE,int(GEOM["size"]),tuple(GEOM["offset"]),row,col)
+    x0,y0,x1,y1=_bounds(row,col); pix=LABELS[y0:y1,x0:x1]
+    counts=np.bincount(pix.reshape(-1).astype(np.intp,copy=False),minlength=len(PALETTE)); used=np.flatnonzero(counts)
+    order=sorted(used.tolist(),key=lambda lab:(-counts[lab],lab)); total=int(counts.sum())
+    candidates=[{"label":int(l),"color":[int(v) for v in PALETTE[l,:3]],"count":int(counts[l]),"share":float(counts[l]/total) if total else 0.0} for l in order]
+    return {"row":row,"column":col,"source_bounds":[x0,y0,x1,y1],"margin":0,"total":total,"winner":candidates[0]["label"] if candidates else None,"vote_margin":(candidates[0]["share"]-(candidates[1]["share"] if len(candidates)>1 else 0.0)) if candidates else 0.0,"candidates":candidates}
+
+def _queue(limit=30):
+    rows=[]
+    for r in range(ART.shape[0]):
+        for c in range(ART.shape[1]):
+            t=_table(r,c)
+            if len(t["candidates"])>1: rows.append({"row":r,"column":c,"margin":t["vote_margin"],"top_share":t["candidates"][0]["share"]})
+    return sorted(rows,key=lambda x:(x["margin"],x["top_share"]))[:limit]
+
+def select_candidate(index):
+    global ART,GEOM,EXPORT_CROP_ENABLED,EXPORT_CROP_BOUNDS
+    GEOM=json.loads(json.dumps(OPTIONS[int(index)])); ART=_candidate_art(GEOM).copy()
+    EXPORT_CROP_ENABLED=False; EXPORT_CROP_BOUNDS=None
+    return json.dumps({"png":_png(ART),"width":int(ART.shape[1]),"height":int(ART.shape[0]),"geometry":GEOM,"queue":_queue(),"palette":palette_entries(),"mesh_lines":GEOM.get("lines")})
+
+def source_cell_at(x,y):
+    x,y=int(x),int(y)
+    if GEOM["kind"]=="mesh":
+        xs=np.asarray(GEOM["lines"][0]); ys=np.asarray(GEOM["lines"][1])
+        col=int(np.searchsorted(xs,x,side="right")-1); row=int(np.searchsorted(ys,y,side="right")-1)
+        if not (0<=row<len(ys)-1 and 0<=col<len(xs)-1): return json.dumps(None)
+    else:
+        cell=int(GEOM["size"]); ox,oy=GEOM["offset"]
+        col=(x-int(ox))//cell; row=(y-int(oy))//cell
+        if not (0<=row<ART.shape[0] and 0<=col<ART.shape[1]): return json.dumps(None)
+    return json.dumps({"row":int(row),"column":int(col)})
+
+def inspect_cell(row,col):
+    row,col=int(row),int(col); t=_table(row,col); x0,y0,x1,y1=t["source_bounds"]
+    crop=SRC[y0:y1,x0:x1]
+    dx=np.abs(np.diff(crop.astype(np.int16),axis=1)).mean() if crop.shape[1]>1 else 0
+    dy=np.abs(np.diff(crop.astype(np.int16),axis=0)).mean() if crop.shape[0]>1 else 0
+    neighbors=[]
+    for rr,cc in ((row-1,col),(row+1,col),(row,col-1),(row,col+1)):
+        if 0<=rr<ART.shape[0] and 0<=cc<ART.shape[1]: neighbors.append([int(v) for v in ART[rr,cc,:3]])
+    neighbor_grid=[]
+    for rr in range(max(0,row-2),min(ART.shape[0],row+3)):
+        for cc in range(max(0,col-2),min(ART.shape[1],col+3)):
+            neighbor_grid.append({"dx":cc-col,"dy":rr-row,"color":[int(v) for v in ART[rr,cc,:3]]})
+    pad=max(x1-x0,y1-y0)
+    cx0,cx1=max(0,x0-pad),min(SRC.shape[1],x1+pad)
+    cy0,cy1=max(0,y0-pad),min(SRC.shape[0],y1+pad)
+    context=SRC[cy0:cy1,cx0:cx1]
+    t.update(source_png=_png(crop),source_context_png=_png(context),source_context_bounds=[cx0,cy0,cx1,cy1],edge_energy=float(dx+dy),neighbor_colors=neighbors,neighbor_grid=neighbor_grid,current_color=[int(v) for v in ART[row,col,:3]])
+    return json.dumps(t)
+
+def apply_cell_vote(row,col,label):
+    global ART
+    ART[int(row),int(col),:3]=PALETTE[int(label),:3]
+    if ART.shape[2]==4: ART[int(row),int(col),3]=255
+    return _png(ART)
+
+def apply_freehand(row,col,color):
+    global ART
+    ART[int(row),int(col),:3]=np.asarray(color,dtype=np.uint8)
+    if ART.shape[2]==4: ART[int(row),int(col),3]=255
+    return _png(ART)
+
+def auto_transparency(enabled,cleanup=True):
+    global ART
+    enabled=bool(enabled)
+    if not enabled:
+        if ART.shape[2]==3:
+            ART=np.dstack([ART,np.full(ART.shape[:2],255,dtype=np.uint8)])
+        ART[:,:,3]=255
+        return json.dumps({"png":_png(ART),"enabled":False,"background":None,"transparent_cells":0,"palette":palette_entries()})
+    ART,background=color_ops.make_border_connected_transparent(ART)
+    border_connected=int(np.count_nonzero(ART[:,:,3]==0))
+    cleanup_info={"removed_cells":0,"removed_components":0,"tolerance":0.0,"max_component_size":0}
+    if bool(cleanup):
+        ART,cleanup_info=color_ops.remove_background_speckles(ART,background)
+    transparent=int(np.count_nonzero(ART[:,:,3]==0))
+    border_samples=int(2*ART.shape[0]+2*ART.shape[1]-4)
+    return json.dumps({"png":_png(ART),"enabled":True,"background":[int(v) for v in background],"transparent_cells":transparent,"border_connected_cells":border_connected,"cleanup":cleanup_info,"border_samples":border_samples,"palette":palette_entries()})
+
+def manual_transparency(color,cleanup=True):
+    global ART
+    chosen=tuple(int(value) for value in color)
+    ART,background=color_ops.make_border_connected_transparent(
+        ART,tolerance=0,background=chosen
+    )
+    border_connected=int(np.count_nonzero(ART[:,:,3]==0))
+    cleanup_info={"removed_cells":0,"removed_components":0,"tolerance":0.0,"max_component_size":0}
+    if bool(cleanup):
+        ART,cleanup_info=color_ops.remove_background_speckles(
+            ART,background,tolerance=0
+        )
+    transparent=int(np.count_nonzero(ART[:,:,3]==0))
+    border_samples=int(2*ART.shape[0]+2*ART.shape[1]-4)
+    return json.dumps({"png":_png(ART),"enabled":True,"background":[int(v) for v in background],"transparent_cells":transparent,"border_connected_cells":border_connected,"cleanup":cleanup_info,"border_samples":border_samples,"palette":palette_entries()})
+
+def configure_crop(enabled,padding=1):
+    global EXPORT_CROP_ENABLED,EXPORT_CROP_PADDING,EXPORT_CROP_BOUNDS
+    EXPORT_CROP_ENABLED=bool(enabled); EXPORT_CROP_PADDING=max(0,int(padding))
+    full_h,full_w=ART.shape[:2]
+    tight,tight_bounds=color_ops.crop_transparent_border(ART,padding=0)
+    if EXPORT_CROP_ENABLED:
+        preview,bounds=color_ops.crop_transparent_border(ART,EXPORT_CROP_PADDING)
+    else:
+        preview=ART; bounds=(0,0,full_w,full_h)
+    EXPORT_CROP_BOUNDS=bounds
+    return json.dumps({"png":_png(preview),"enabled":EXPORT_CROP_ENABLED,"padding":EXPORT_CROP_PADDING,"bounds":list(bounds),"opaque_bounds":list(tight_bounds),"full_size":[full_w,full_h],"output_size":[int(preview.shape[1]),int(preview.shape[0])]})
+
+def palette_entries():
+    colors,counts=np.unique(ART[:,:,:3].reshape(-1,3),axis=0,return_counts=True)
+    order=np.argsort(counts)[::-1]
+    return [{"color":[int(v) for v in colors[i]],"count":int(counts[i])} for i in order]
+
+def merge_palette(target,source):
+    global ART
+    target=np.asarray(target,dtype=np.uint8); source=np.asarray(source,dtype=np.uint8)
+    mask=np.all(ART[:,:,:3]==source,axis=2); count=int(mask.sum()); ART[mask,:3]=target
+    return json.dumps({"png":_png(ART),"replaced":count,"palette":palette_entries()})
+
+def nudge_line(axis,index,new_position):
+    global ART,GEOM
+    if GEOM["kind"]!="mesh": raise ValueError("select a mesh candidate before nudging")
+    lines=GEOM["lines"][0 if axis=="x" else 1]; index=int(index); old=int(lines[index])
+    lo=int(lines[index-1])+1; hi=int(lines[index+1])-1; new=max(lo,min(hi,int(new_position))); lines[index]=new
+    ART=_candidate_art(GEOM).copy(); proj=PROJ_X if axis=="x" else PROJ_Y; a=max(0,old-8); b=min(len(proj),old+9)
+    return json.dumps({"png":_png(ART),"old":old,"new":new,"axis":axis,"index":index,"projection_start":a,"projection_window":[float(v) for v in proj[a:b]],"mesh_lines":GEOM["lines"],"queue":_queue(),"palette":palette_entries()})
+
+def export_ground_truth():
+    if EXPORT_CROP_ENABLED:
+        cropped,_=color_ops.crop_transparent_border(ART,EXPORT_CROP_PADDING)
+        return _png(cropped)
+    return _png(ART)
+`;
+
+async function boot(){
+  pyodide=await loadPyodide(); $("status").textContent="Loading numpy, OpenCV, Pillow…"; await pyodide.loadPackage(["numpy","opencv-python","pillow"]); pyodide.FS.mkdirTree("/app/pixel_perfecter");
+  for(const m of MODULES){const r=await fetch(`../pixel_perfecter/${m}.py`,{cache:"no-cache"});if(!r.ok)throw Error(`Cannot fetch ${m}.py`);pyodide.FS.writeFile(`/app/pixel_perfecter/${m}.py`,await r.text())}
+  await pyodide.runPythonAsync(PY); await loadManifest(); $("status").textContent="Ready"; $("loadCorpus").disabled=false;
+}
+async function loadManifest(){const m=await(await fetch("../benchmarks/wild_corpus/manifest.json",{cache:"no-cache"})).json();const s=$("imageSelect");s.innerHTML="";for(const e of m.entries){const o=document.createElement("option");o.value=e.id;o.dataset.file=e.file;o.textContent=`${e.id} · ${e.original_name}`;s.append(o)}for(const id of ["e94292f0af6ee54a","420f84a49bd4bc3a"]){const o=[...s.options].find(x=>x.value===id);if(o){s.remove(o.index);s.add(o,0)}}s.value="420f84a49bd4bc3a"}
+async function analyzeBytes(bytes,id){imageId=id;decisions=[];selectedCell=null;paletteSelection=[];transparencyMode="off";transparencyColorTouched=false;$("autoTransparency").checked=false;setTransparencyControls(false);$("transparencyStatus").textContent="Off. Best for tiles, paintings, and full-frame art.";$("cropStatus").textContent="Enable transparency to measure and crop the sprite content.";$("status").textContent="Scoring machine candidates…";pyodide.globals.set("js_data",new Uint8Array(bytes));pyodide.globals.set("js_id",id);analysis=JSON.parse(await pyodide.runPythonAsync("analyze(js_data.to_py(),js_id)"));sourceImage.src="data:image/png;base64,"+analysis.source_png;renderCandidates();$("workspace").classList.remove("hidden");updateSaveUI();await chooseCandidate(0,false);$("status").textContent="Ready";renderLog()}
+function renderCandidates(){const box=$("candidates");box.innerHTML="";analysis.options.forEach((o,i)=>{const b=document.createElement("button");b.className="candidate";b.dataset.i=i;b.title=`${o.label} · score ${o.score.toFixed(3)}${o.variance==null?"":` · variance ${o.variance.toFixed(1)}`}`;b.innerHTML=`<img src="data:image/png;base64,${o.png}"><span class="option-name">Option ${i+1}</span><small>${o.label} · ${o.width}×${o.height}</small>`;b.onclick=()=>chooseCandidate(i,true);box.append(b)});$("scrub").max=Math.max(0,analysis.options.length-1);const u=analysis.uncertainty;$("imageUncertainty").className=u.harmonic_ambiguous||!u.peaked?"uncertain":"good";$("imageUncertainty").textContent=`${u.harmonic_ambiguous?"Harmonic alternatives found. ":""}Peak/median ${u.peak_to_median.toFixed(2)}; ${u.peaked?"clear score peak":"flat score curve"}.`}
+async function chooseCandidate(i,logIt){selectedCell=null;transparencyMode="off";transparencyColorTouched=false;$("inspectorCard").classList.add("hidden");$("autoTransparency").checked=false;setTransparencyControls(false);$("transparencyStatus").textContent="Off. Candidate changes reset transparency.";$("cropStatus").textContent="Enable transparency to measure and crop the sprite content.";$("scrub").value=i;$("scrubLabel").textContent=analysis.options[i].label;current=JSON.parse(await pyodide.runPythonAsync(`select_candidate(${i})`));document.querySelectorAll(".candidate").forEach((b,j)=>b.classList.toggle("selected",j===+i));drawArt(current.png);renderQueue(current.queue);renderPalette(current.palette);updateMeshControls();drawSource();if(logIt)await record("pitch_pick",{candidate_table:analysis.fit_debug,image_uncertainty:analysis.uncertainty},{...analysis.options[i],png:undefined})}
+function drawArt(png,nativePng=png){artImage.onload=renderArtCanvases;nativeImage.onload=renderArtCanvases;artImage.src="data:image/png;base64,"+png;nativeImage.src="data:image/png;base64,"+nativePng}
+function setNativePreview(png){nativeImage.onload=renderArtCanvases;nativeImage.src="data:image/png;base64,"+png}
+function renderArtCanvases(){const enlarged=$("artCanvas"),native=$("nativeCanvas");if(artImage.complete&&artImage.naturalWidth){enlarged.width=artImage.naturalWidth;enlarged.height=artImage.naturalHeight;enlarged.getContext("2d").drawImage(artImage,0,0);if(selectedCell){const ctx=enlarged.getContext("2d");ctx.strokeStyle="#ffe45c";ctx.lineWidth=.18;ctx.strokeRect(selectedCell.column+.09,selectedCell.row+.09,.82,.82)}$("outputSize").textContent=`${artImage.naturalWidth} × ${artImage.naturalHeight}px`}if(nativeImage.complete&&nativeImage.naturalWidth){native.width=nativeImage.naturalWidth;native.height=nativeImage.naturalHeight;native.getContext("2d").drawImage(nativeImage,0,0);$("nativeSize").textContent=`${nativeImage.naturalWidth} × ${nativeImage.naturalHeight}px export`}}
+function drawSource(preview){if(!sourceImage.complete)return sourceImage.onload=()=>drawSource();const c=$("sourceCanvas"),ctx=c.getContext("2d");c.width=analysis.source_width;c.height=analysis.source_height;ctx.drawImage(sourceImage,0,0);$("sourceSize").textContent=`${c.width} × ${c.height}px`;const lines=(preview||current?.mesh_lines);if($("showGrid").checked&&lines){ctx.strokeStyle="#ff3978";ctx.lineWidth=Math.max(1,c.width/600);ctx.beginPath();for(const x of lines[0]){ctx.moveTo(x,0);ctx.lineTo(x,c.height)}for(const y of lines[1]){ctx.moveTo(0,y);ctx.lineTo(c.width,y)}ctx.stroke()}if(selectedCell?.source_bounds){const [x0,y0,x1,y1]=selectedCell.source_bounds;ctx.strokeStyle="#ffe45c";ctx.lineWidth=Math.max(2,c.width/400);ctx.strokeRect(x0,y0,x1-x0,y1-y0)}}
+function updateMeshControls(){const available=!!current?.mesh_lines;if(!available)$("showGrid").checked=false;$("showGrid").disabled=!available;const enabled=$("showGrid").checked&&available;$("sourceCanvas").classList.toggle("nudge-ready",enabled);$("meshHint").textContent=enabled?"Drag any pink boundary; its projection context will be logged.":available?"Turn on mesh lines to drag a boundary over the original.":"Choose a mesh option to adjust grid boundaries."}
+async function updateCrop(logIt=false){const enabled=transparencyMode!=="off"&&$("autoCrop").checked,padding=Math.max(0,parseInt($("cropPadding").value||"0",10)),res=JSON.parse(await pyodide.runPythonAsync(`configure_crop(${enabled?'True':'False'},${padding})`));setNativePreview(res.png);$("cropStatus").textContent=enabled?`Full grid ${res.full_size[0]}×${res.full_size[1]} · opaque content ${res.opaque_bounds[2]-res.opaque_bounds[0]}×${res.opaque_bounds[3]-res.opaque_bounds[1]} · export ${res.output_size[0]}×${res.output_size[1]} · bounds (${res.bounds.join(", ")}).`:'Cropping off; the full generated grid will be saved.';if(logIt)await record("crop",{full_size:res.full_size,opaque_bounds:res.opaque_bounds,padding:res.padding},{enabled:res.enabled,bounds:res.bounds,output_size:res.output_size});return res}
+function renderQueue(items){const q=$("queue");q.innerHTML=items.length?"":"No competing cell votes.";for(const x of items){const b=document.createElement("button");b.innerHTML=`cell (${x.column}, ${x.row}) <span class="margin">margin ${(100*x.margin).toFixed(1)}%</span>`;b.onclick=()=>inspectCell(x.row,x.column);q.append(b)}}
+function colorToHex(color){return "#"+color.map(value=>Math.max(0,Math.min(255,value)).toString(16).padStart(2,"0")).join("").toUpperCase()}
+function normalizeHex(value){const match=String(value).trim().match(/^#?([0-9a-f]{6})$/i);return match?"#"+match[1].toUpperCase():null}
+function setManualColor(value,statusText){const hex=normalizeHex(value);if(!hex)return false;const color=[1,3,5].map(i=>parseInt(hex.slice(i,i+2),16));$("freeColor").value=hex.toLowerCase();$("freeColorHex").value=hex;$("freeColorHex").setAttribute("aria-invalid","false");$("freeColorReadout").textContent=`${hex} · rgb(${color.join(", ")})`;if(statusText)$("manualColorStatus").textContent=statusText;return true}
+function sampleCellSource(event){const image=event.currentTarget;if(!image.naturalWidth)return;const rect=image.getBoundingClientRect(),x=Math.min(image.naturalWidth-1,Math.max(0,Math.floor((event.clientX-rect.left)*image.naturalWidth/rect.width))),y=Math.min(image.naturalHeight-1,Math.max(0,Math.floor((event.clientY-rect.top)*image.naturalHeight/rect.height))),canvas=document.createElement("canvas");canvas.width=image.naturalWidth;canvas.height=image.naturalHeight;const context=canvas.getContext("2d");context.drawImage(image,0,0);const color=[...context.getImageData(x,y,1,1).data.slice(0,3)];setManualColor(colorToHex(color),`Sampled source (${x}, ${y}) · rgb(${color.join(", ")})`)}
+async function inspectCell(row,col){selectedCell=JSON.parse(await pyodide.runPythonAsync(`inspect_cell(${row},${col})`));drawSource();renderArtCanvases();$("inspectorCard").classList.remove("hidden");$("cellSource").src="data:image/png;base64,"+selectedCell.source_context_png;$("cellMeta").innerHTML=`<b>cell (${col}, ${row})</b> · ${selectedCell.source_bounds.join(", ")}<br>vote margin ${(100*selectedCell.vote_margin).toFixed(1)}% · edge energy ${selectedCell.edge_energy.toFixed(2)} · trim ${selectedCell.margin}px<br><span class="hint">Preview includes one-cell source padding; yellow boxes show the selected cell.</span>`;setManualColor(colorToHex(selectedCell.current_color),`Current pixel · rgb(${selectedCell.current_color.join(", ")})`);const v=$("votes");v.innerHTML="";for(const x of selectedCell.candidates){const b=document.createElement("button");b.className="vote";b.innerHTML=`<span class="swatch" style="background:rgb(${x.color})"></span> label ${x.label} · ${x.count}/${selectedCell.total} · ${(100*x.share).toFixed(1)}%`;b.onclick=()=>chooseVote(x);v.append(b)}}
+async function chooseVote(choice){const s=selectedCell,old=[...s.current_color];const png=await pyodide.runPythonAsync(`apply_cell_vote(${s.row},${s.column},${choice.label})`);drawArt(png);await record("cell_vote",{vote_shares:s.candidates,margin_config:{trim_pixels:s.margin,rule:"cell_margin"},cell_edge_energy:s.edge_energy,neighbor_colors:s.neighbor_colors,neighbor_grid:s.neighbor_grid,cell:[s.column,s.row],source_bounds:s.source_bounds,source_context_bounds:s.source_context_bounds,old_color:old},{palette_label:choice.label,color:choice.color});s.current_color=[...choice.color];const center=s.neighbor_grid.find(x=>x.dx===0&&x.dy===0);if(center)center.color=[...choice.color];setManualColor(colorToHex(choice.color),`Applied machine suggestion · rgb(${choice.color.join(", ")})`);await refreshDerived()}
+async function refreshDerived(){current=JSON.parse(await pyodide.runPythonAsync("json.dumps({'queue':_queue(),'palette':palette_entries(),'mesh_lines':GEOM.get('lines')})"));renderQueue(current.queue);renderPalette(current.palette);current.mesh_lines&&drawSource();if(transparencyMode!=="off")await updateCrop(false)}
+function colorFamilyKey(color){const values=color.map(value=>value/255),max=Math.max(...values),min=Math.min(...values),delta=max-min,lightness=(max+min)/2,saturation=delta===0?0:delta/(1-Math.abs(2*lightness-1));let hue=0;if(delta){if(max===values[0])hue=60*((values[1]-values[2])/delta%6);else if(max===values[1])hue=60*((values[2]-values[0])/delta+2);else hue=60*((values[0]-values[1])/delta+4);if(hue<0)hue+=360}const neutral=saturation<.12,hueFamily=neutral?-1:Math.floor(((hue+30)%360)/30);return [neutral?0:1,hueFamily,Math.round(lightness*12),-saturation]}
+function orderPaletteEntries(entries){return [...entries].map(entry=>({entry,key:colorFamilyKey(entry.color)})).sort((a,b)=>{for(let i=0;i<a.key.length;i++){const difference=a.key[i]-b.key[i];if(difference)return difference}return b.entry.count-a.entry.count}).map(item=>item.entry)}
+function updatePaletteSelectionUI(){const p=$("palette");for(const button of p.querySelectorAll("button")){const position=paletteSelection.findIndex(entry=>entry.color.join(",")===button.dataset.color);button.classList.toggle("on",position>=0);button.dataset.order=position>=0?String(position+1):""}$("merge").disabled=paletteSelection.length!==2;$("mergeHint").textContent=paletteSelection.length===2?`Replace rgb(${paletteSelection[1].color}) with rgb(${paletteSelection[0].color})`:"Select two colors."}
+function setTransparencyColor(value,touched=true){const hex=normalizeHex(value);if(!hex)return false;const color=[1,3,5].map(i=>parseInt(hex.slice(i,i+2),16));$("transparencyColor").value=hex.toLowerCase();$("transparencyColorHex").value=hex;$("transparencyColorHex").setAttribute("aria-invalid","false");$("transparencyColorReadout").textContent=`${hex} · rgb(${color.join(", ")})`;if(touched)transparencyColorTouched=true;for(const button of $("transparencyPalette").querySelectorAll("button"))button.classList.toggle("chosen",button.dataset.color===color.join(","));return true}
+function renderTransparencyPalette(entries){const p=$("transparencyPalette"),ordered=orderPaletteEntries(entries).slice(0,64);p.innerHTML="";if(!transparencyColorTouched&&entries.length)setTransparencyColor(colorToHex(entries[0].color),false);for(const e of ordered){const b=document.createElement("button"),key=e.color.join(",");b.title=`Use ${colorToHex(e.color)} · rgb(${e.color}) as transparency`;b.setAttribute("aria-label",b.title);b.dataset.color=key;b.style.background=`rgb(${e.color})`;b.onclick=()=>setTransparencyColor(colorToHex(e.color),true);p.append(b)}setTransparencyColor($("transparencyColor").value,false)}
+function setTransparencyControls(enabled){$("autoCrop").disabled=!enabled;$("cropPadding").disabled=!enabled||!$("autoCrop").checked;$("clearTransparency").disabled=!enabled}
+function renderPalette(entries){const p=$("palette"),ordered=orderPaletteEntries(entries).slice(0,64);p.innerHTML="";paletteSelection=[];$("paletteSummary").textContent=`${ordered.length} color${ordered.length===1?"":"s"} · grouped by hue and brightness`;for(const e of ordered){const b=document.createElement("button"),key=e.color.join(",");b.title=`${colorToHex(e.color)} · rgb(${e.color}) · ${e.count} pixel${e.count===1?"":"s"}`;b.setAttribute("aria-label",b.title);b.dataset.color=key;b.style.background=`rgb(${e.color})`;b.onclick=()=>{const position=paletteSelection.findIndex(entry=>entry.color.join(",")===key);if(position>=0)paletteSelection.splice(position,1);else{paletteSelection.push(e);if(paletteSelection.length>2)paletteSelection.shift()}updatePaletteSelectionUI()};p.append(b)}updatePaletteSelectionUI();renderTransparencyPalette(entries)}
+async function record(kind,context,choice){const d={id:imageId,kind,context,choice,ts:new Date().toISOString()};decisions.push(d);sessionDecisions.push(d);renderLog();updateSaveUI();try{const r=await fetch(`/api/fixes/${imageId}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({decision:d})});if(!r.ok)throw Error(await r.text());$("persist").textContent=`Saved decision immediately to benchmarks/wild_corpus/fixes/${imageId}.jsonl`;}catch(e){$("persist").textContent="Static-server mode: decisions are only in memory; export a backup before closing."}}
+function renderLog(){$("log").textContent=decisions.length?decisions.map(x=>JSON.stringify(x)).join("\n"):"No decisions yet."}
+function download(name,type,data){const a=document.createElement("a");a.download=name;a.href=URL.createObjectURL(new Blob([data],{type}));a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
+function updateSaveUI(){$("savePaths").innerHTML=`Decisions → benchmarks/wild_corpus/fixes/${imageId}.jsonl<br>Corrected sprite → benchmarks/wild_corpus/ground_truth/${imageId}.png`;$('sessionSummary').textContent=`${sessionSaved.size} sprite${sessionSaved.size===1?'':'s'} saved this session · ${sessionDecisions.length} calibration decision${sessionDecisions.length===1?'':'s'}`}
+async function turnTransparencyOff(logIt=true){const res=JSON.parse(await pyodide.runPythonAsync("auto_transparency(False)"));transparencyMode="off";$("autoTransparency").checked=false;drawArt(res.png);renderPalette(res.palette);setTransparencyControls(false);$("transparencyStatus").textContent="Transparency off; all cells are opaque.";if(logIt)await record("transparency",{method:"disabled",transparent_cells:0},{enabled:false,background:null,mode:"off"});await updateCrop(logIt)}
+async function loadSelected(){const o=$("imageSelect").selectedOptions[0];const r=await fetch(`../benchmarks/wild_corpus/${o.dataset.file}`,{cache:"no-cache"});await analyzeBytes(await r.arrayBuffer(),o.value)}
+async function saveCurrent(goNext=false){const png=await pyodide.runPythonAsync("export_ground_truth()"),raw=Uint8Array.from(atob(png),c=>c.charCodeAt(0));try{const r=await fetch(`/api/ground_truth/${imageId}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({png})});if(!r.ok)throw Error(await r.text());sessionSaved.add(imageId);$("persist").textContent=`Saved benchmarks/wild_corpus/ground_truth/${imageId}.png`;}catch(e){download(`${imageId}.png`,"image/png",raw);sessionSaved.add(imageId);$("persist").textContent="Downloaded corrected sprite; repository persistence was unavailable."}updateSaveUI();if(goNext){const s=$("imageSelect");s.selectedIndex=(s.selectedIndex+1)%s.options.length;await loadSelected()}}
+$("loadCorpus").onclick=loadSelected;
+$("file").onchange=async e=>{const f=e.target.files[0];if(f)await analyzeBytes(await f.arrayBuffer(),(f.name.match(/[a-f0-9]{16}/)||[crypto.randomUUID().replaceAll("-","").slice(0,16)])[0])};
+$("scrub").oninput=e=>chooseCandidate(+e.target.value,false);
+$("artCanvas").onclick=e=>{const r=e.target.getBoundingClientRect(),col=Math.floor((e.clientX-r.left)*e.target.width/r.width),row=Math.floor((e.clientY-r.top)*e.target.height/r.height);inspectCell(row,col)};
+$("cellSource").onclick=sampleCellSource;
+$("showGrid").onchange=()=>{updateMeshControls();drawSource()};
+$("autoTransparency").onchange=async e=>{if(!e.target.checked)return turnTransparencyOff(true);const cleanup=$("removeSpeckles").checked,res=JSON.parse(await pyodide.runPythonAsync(`auto_transparency(True,${cleanup?'True':'False'})`));transparencyMode="auto";setTransparencyColor(colorToHex(res.background),true);drawArt(res.png);renderPalette(res.palette);setTransparencyControls(true);const cleaned=res.cleanup.removed_cells?` Cleaned ${res.cleanup.removed_cells} detached background-like cells in ${res.cleanup.removed_components} group${res.cleanup.removed_components===1?'':'s'}.`:"";$("transparencyStatus").textContent=`Automatic: removed ${res.border_connected_cells} border-connected cells around rgb(${res.background}).${cleaned}`;await record("transparency",{method:"adaptive_dominant_border_cluster_connected_to_edge",transparent_cells:res.transparent_cells,border_connected_cells:res.border_connected_cells,border_samples:res.border_samples||0,speckle_cleanup:{enabled:cleanup,...res.cleanup}},{enabled:true,background:res.background,mode:"auto"});await updateCrop(true)};
+$("transparencyColor").oninput=e=>setTransparencyColor(e.target.value,true);
+$("transparencyColorHex").oninput=e=>{if(!setTransparencyColor(e.target.value,true))e.target.setAttribute("aria-invalid","true")};
+$("transparencyColorHex").onblur=()=>setTransparencyColor($("transparencyColor").value,false);
+$("transparencyColorHex").onkeydown=e=>{if(e.key==="Enter"&&normalizeHex(e.target.value))$("applyTransparencyColor").click()};
+$("applyTransparencyColor").onclick=async()=>{const hex=$("transparencyColor").value,color=[1,3,5].map(i=>parseInt(hex.slice(i,i+2),16)),cleanup=$("removeSpeckles").checked,res=JSON.parse(await pyodide.runPythonAsync(`manual_transparency(${JSON.stringify(color)},${cleanup?'True':'False'})`));transparencyMode="manual";$("autoTransparency").checked=false;drawArt(res.png);renderPalette(res.palette);setTransparencyControls(true);const cleaned=res.cleanup.removed_cells?` Cleaned ${res.cleanup.removed_cells} detached exact-color cells in ${res.cleanup.removed_components} group${res.cleanup.removed_components===1?'':'s'}.`:"";$("transparencyStatus").textContent=`Manual: removed ${res.border_connected_cells} border-connected cells matching rgb(${res.background}).${cleaned} Interior matches attached to the sprite were preserved.`;await record("transparency",{method:"manual_exact_color_connected_to_edge",transparent_cells:res.transparent_cells,border_connected_cells:res.border_connected_cells,border_samples:res.border_samples||0,chosen_color:color,speckle_cleanup:{enabled:cleanup,...res.cleanup}},{enabled:true,background:res.background,mode:"manual"});await updateCrop(true)};
+$("removeSpeckles").onchange=async()=>{if(transparencyMode==="auto")await $("autoTransparency").onchange({target:$("autoTransparency")});else if(transparencyMode==="manual")await $("applyTransparencyColor").onclick()};
+$("clearTransparency").onclick=()=>turnTransparencyOff(true);
+$("autoCrop").onchange=async e=>{$("cropPadding").disabled=!e.target.checked||transparencyMode==="off";await updateCrop(true)};
+$("cropPadding").oninput=()=>updateCrop(true);
+$("freeColor").oninput=e=>setManualColor(e.target.value,"Custom color selected; paint when ready.");
+$("freeColorHex").oninput=e=>{if(!setManualColor(e.target.value,"Custom hex color entered; paint when ready."))e.target.setAttribute("aria-invalid","true")};
+$("freeColorHex").onblur=()=>setManualColor($("freeColor").value);
+$("freeColorHex").onkeydown=e=>{if(e.key==="Enter"&&normalizeHex(e.target.value))$("freehand").click()};
+$("freehand").onclick=async()=>{if(!selectedCell)return;const hex=$("freeColor").value,color=[1,3,5].map(i=>parseInt(hex.slice(i,i+2),16)),old=[...selectedCell.current_color];const png=await pyodide.runPythonAsync(`apply_freehand(${selectedCell.row},${selectedCell.column},${JSON.stringify(color)})`);drawArt(png);await record("freehand",{cell:[selectedCell.column,selectedCell.row],old_color:old,neighbor_grid:selectedCell.neighbor_grid,source_bounds:selectedCell.source_bounds,source_context_bounds:selectedCell.source_context_bounds},{color});selectedCell.current_color=[...color];const center=selectedCell.neighbor_grid.find(x=>x.dx===0&&x.dy===0);if(center)center.color=[...color];$("manualColorStatus").textContent=`Painted cell (${selectedCell.column}, ${selectedCell.row}) · rgb(${color.join(", ")})`;await refreshDerived()};
+$("merge").onclick=async()=>{const [target,source]=paletteSelection,res=JSON.parse(await pyodide.runPythonAsync(`merge_palette(${JSON.stringify(target.color)},${JSON.stringify(source.color)})`));drawArt(res.png);await record("palette_merge",{colors:[target.color,source.color],pixel_counts:[target.count,source.count]},{target:target.color,merged:source.color});renderPalette(res.palette);await refreshDerived()};
+$("exportLog").onclick=()=>download(`${imageId}.jsonl`,"application/x-ndjson",decisions.map(x=>JSON.stringify(x)).join("\n")+"\n");
+$("exportSession").onclick=()=>download(`fixlab-session-${new Date().toISOString().slice(0,10)}.jsonl`,"application/x-ndjson",sessionDecisions.map(x=>JSON.stringify(x)).join("\n")+"\n");
+$("complete").onclick=()=>saveCurrent(false);
+$("saveNext").onclick=()=>saveCurrent(true);
+$("sourceCanvas").onpointerdown=e=>{const c=e.target,r=c.getBoundingClientRect(),x=(e.clientX-r.left)*c.width/r.width,y=(e.clientY-r.top)*c.height/r.height;sourcePointerDown={clientX:e.clientX,clientY:e.clientY,dragged:false};if(!$("showGrid").checked||!current?.mesh_lines)return;let best={d:Infinity};current.mesh_lines[0].forEach((v,i)=>{if(i&&i<current.mesh_lines[0].length-1&&Math.abs(v-x)<best.d)best={axis:"x",index:i,d:Math.abs(v-x)}});current.mesh_lines[1].forEach((v,i)=>{if(i&&i<current.mesh_lines[1].length-1&&Math.abs(v-y)<best.d)best={axis:"y",index:i,d:Math.abs(v-y)}});if(best.d<20){drag=best;c.setPointerCapture(e.pointerId)}};
+$("sourceCanvas").onpointermove=e=>{if(sourcePointerDown&&Math.hypot(e.clientX-sourcePointerDown.clientX,e.clientY-sourcePointerDown.clientY)>3)sourcePointerDown.dragged=true;if(!drag)return;const c=e.target,r=c.getBoundingClientRect(),pos=Math.round(drag.axis==="x"?(e.clientX-r.left)*c.width/r.width:(e.clientY-r.top)*c.height/r.height),preview=structuredClone(current.mesh_lines);preview[drag.axis==="x"?0:1][drag.index]=pos;drawSource(preview)};
+$("sourceCanvas").onpointerup=async e=>{if(!drag)return;sourcePointerDown.dragged=true;const c=e.target,r=c.getBoundingClientRect(),pos=Math.round(drag.axis==="x"?(e.clientX-r.left)*c.width/r.width:(e.clientY-r.top)*c.height/r.height),d=drag;drag=null;let res=JSON.parse(await pyodide.runPythonAsync(`nudge_line('${d.axis}',${d.index},${pos})`));if(transparencyMode!=="off"){const color=[1,3,5].map(i=>parseInt($("transparencyColor").value.slice(i,i+2),16)),cleanup=$("removeSpeckles").checked,alpha=transparencyMode==="auto"?JSON.parse(await pyodide.runPythonAsync(`auto_transparency(True,${cleanup?'True':'False'})`)):JSON.parse(await pyodide.runPythonAsync(`manual_transparency(${JSON.stringify(color)},${cleanup?'True':'False'})`));res.png=alpha.png;res.palette=alpha.palette}selectedCell=null;$("inspectorCard").classList.add("hidden");current.mesh_lines=res.mesh_lines;drawArt(res.png);drawSource();renderQueue(res.queue);renderPalette(res.palette);await record("line_nudge",{axis:res.axis,line_index:res.index,projection_start:res.projection_start,projection_signal_window:res.projection_window,old_snap:res.old,new_position:res.new},{position:res.new});if(transparencyMode!=="off")await updateCrop(false)};
+$("sourceCanvas").onclick=async e=>{if(sourcePointerDown?.dragged){sourcePointerDown=null;return}sourcePointerDown=null;const c=e.target,r=c.getBoundingClientRect(),x=Math.floor((e.clientX-r.left)*c.width/r.width),y=Math.floor((e.clientY-r.top)*c.height/r.height),cell=JSON.parse(await pyodide.runPythonAsync(`source_cell_at(${x},${y})`));if(cell)await inspectCell(cell.row,cell.column)};
+boot().catch(e=>{$("status").textContent="Startup failed: "+e;console.error(e)});
+</script>
+</body>
+</html>

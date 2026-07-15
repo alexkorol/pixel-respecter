@@ -9,6 +9,9 @@ Pixel Perfecter turns degraded "pixel art" — AI-generated renders, scaled scre
 - **Core reconstructor (`pixel_perfecter/`)** – Detects the pixel grid (even non-integer upscales), collapses each cell to its dominant color, and emits halo-aware diagnostics.
 - **Interactive GUI (`python -m pixel_perfecter.gui`)** – PySide6 app with drag-and-drop import, live previews, and structured feedback logging.
 - **Batch CLI (`python -m pixel_perfecter.cli`)** – Processes files or directories, writes reconstructions plus overlays, and records metrics to CSV.
+- **ComfyUI node (`comfyui_pixel_perfecter/`)** – Drop the repo into `ComfyUI/custom_nodes/` and post-process generated images into true 1× pixel art inside any workflow. See its [README](comfyui_pixel_perfecter/README.md).
+- **Web demo (`webdemo/`)** – Drag-and-drop page running the real core in-browser via Pyodide/WASM; deployable straight to GitHub Pages. See its [README](webdemo/README.md).
+- **Wild benchmark (`benchmarks/wild_corpus/`)** – Real AI-generated images + one-command eval (`python benchmarks/eval_wild.py`) with a visual verdict gallery.
 - **Meta pipeline (`pipeline/`)** – extract → clean → tag → caption → prompts → generate → package → train. Includes DCSS tile datamining and a curation gallery.
 - **LoRA training (`training/`)** – Fine-tuning infrastructure for the pixelize model.
 
@@ -65,6 +68,11 @@ python -m pixel_perfecter.cli input extra/*.png \
 | `-o, --output-dir PATH` | Destination for reconstructed sprites (default: `./output`). |
 | `--overlay-dir PATH` | Optional directory for validation overlays (defaults to the output dir). |
 | `--mode {global,adaptive}` | Grid strategy. Adaptive fits per-region grids when a single lattice fails. |
+| `--palette {pico8,db32,gameboy,none}` | Snap the reconstructed art to a fixed palette (CIELAB nearest-color). NES is omitted deliberately: the 2C02 has no canonical RGB palette. |
+| `--max-colors N` | Reduce the reconstruction to at most N colors (no dithering). |
+| `--transparent-bg` | Make the dominant border color transparent (output becomes PNG). |
+| `--split-frames` | Sprite-sheet mode: also export each frame of the shared-grid reconstruction as `<stem>_frames/frame_NN.png`. One reconstruction covers the sheet, so all frames share one grid, pitch, and palette. |
+| `--sharpen` | Unsharp-mask the source first. Recovers cell detail on softly rendered / bloom-heavy sources; avoid on crisp input. |
 | `--overlay-mode {combined,raw,halo_suppressed,core_only}` | Diagnostic composite to export. |
 | `--skip-overlays` | Do not write overlay images. |
 | `--ml` | Enable ML suggestions if `ml/` checkpoints are present (ignored in adaptive mode). |

@@ -415,7 +415,10 @@ def downsample_mesh(
     num_colors = len(palette)
     num_cells = grid_h * grid_w
 
-    combined = ids.astype(np.int64) * num_colors + labels
+    # np.intp, not int64: bincount requires the platform index type, and on
+    # 32-bit targets (Pyodide/wasm32) int64 input raises. Cell*color ids stay
+    # far below 2**31 (see MAX_BINCOUNT_CELLS in grid.py).
+    combined = ids.astype(np.intp) * num_colors + labels
     counts = np.bincount(combined.ravel(), minlength=num_cells * num_colors)
     modes = counts.reshape(num_cells, num_colors).argmax(axis=1)
     return palette[modes].reshape(grid_h, grid_w, 3)
@@ -447,8 +450,14 @@ def mesh_quality_score(img: np.ndarray, mesh: Mesh) -> float:
     mean_grid = means.reshape(grid_h, grid_w, 3)
     h_diff = np.abs(mean_grid[:, :-1] - mean_grid[:, 1:]).sum(axis=-1)
     v_diff = np.abs(mean_grid[:-1, :] - mean_grid[1:, :]).sum(axis=-1)
-    inter = float(np.mean(np.concatenate([h_diff.ravel(), v_diff.ravel()])))
+    pairs = np.concatenate([h_diff.ravel(), v_diff.ravel()])
+    inter = float(pairs.mean())
+
+    # Same statistical-support weight as grid_quality_score: a mesh of a few
+    # giant cells straddling subject and background must not outscore a fine
+    # mesh judged over thousands of pairs.
+    support = float(np.sqrt(pairs.size / (pairs.size + 400.0)))
 
     if intra < 0.1:
-        return inter * 100.0
-    return inter / float(np.sqrt(intra))
+        return inter * 100.0 * support
+    return inter / float(np.sqrt(intra)) * support

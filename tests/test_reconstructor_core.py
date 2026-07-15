@@ -17,6 +17,7 @@ from pixel_perfecter.reconstructor import (
     PixelArtReconstructor,
     _build_diff_context,
     _compute_intra_cell_variance,
+    unsharp_prepass,
 )
 
 
@@ -41,6 +42,18 @@ def upscale_fractional(art: np.ndarray, pitch: float) -> np.ndarray:
     bounds = np.round(np.arange(n + 1) * pitch).astype(int)
     idx = np.repeat(np.arange(n), np.diff(bounds))
     return art[np.ix_(idx, idx)]
+
+
+def make_flat_bg_art(grid: int = 64, sprite: int = 24, seed: int = 7) -> np.ndarray:
+    """Sprite centered on a large flat background (typical AI output)."""
+    rng = np.random.default_rng(seed)
+    palette = rng.integers(0, 256, size=(12, 3), dtype=np.uint8)
+    art = np.full((grid, grid, 3), (40, 42, 60), dtype=np.uint8)
+    lo = (grid - sprite) // 2
+    art[lo : lo + sprite, lo : lo + sprite] = palette[
+        rng.integers(0, 12, size=(sprite, sprite))
+    ]
+    return art
 
 
 # ---------------------------------------------------------------------------
@@ -109,6 +122,33 @@ class TestDownsampleMode:
         labels, palette = grid_ops.label_image(img)
         out = grid_ops.downsample_mode(labels, palette, 7, (2, 4))
         assert np.array_equal(out, art[1:, 1:])
+
+    def test_cell_vote_table_matches_reconstruction_and_margin(self):
+        labels = np.zeros((6, 6), dtype=np.int32)
+        labels[1:5, 1:5] = np.array([
+            [1, 1, 1, 2],
+            [1, 1, 2, 2],
+            [1, 2, 2, 2],
+            [1, 1, 1, 2],
+        ], dtype=np.int32)
+        palette = np.array([
+            [0, 0, 0], [200, 20, 30], [20, 180, 40]
+        ], dtype=np.uint8)
+
+        table = grid_ops.cell_vote_table(
+            labels, palette, 6, (0, 0), 0, 0, trim_margin=True
+        )
+        out = grid_ops.downsample_mode(
+            labels, palette, 6, (0, 0), trim_margin=True
+        )
+
+        assert table["margin"] == 1
+        assert table["total"] == 16
+        assert table["winner"] == 1
+        assert table["candidates"][0]["count"] == 9
+        assert table["candidates"][1]["count"] == 7
+        assert table["vote_margin"] == pytest.approx(2 / 16)
+        assert np.array_equal(out[0, 0], palette[table["winner"]])
 
 
 class TestGridQualityScore:
@@ -258,6 +298,82 @@ class TestColors:
         assert out[0, 0, 3] == 0
         assert out[4, 4, 3] == 255
 
+    def test_border_connected_transparency_preserves_interior_reuse(self):
+        img = np.zeros((7, 7, 3), dtype=np.uint8)
+        img[1:6, 1:6] = (220, 80, 40)
+        img[3, 3] = (0, 0, 0)  # same RGB as background, but disconnected
+        out, background = color_ops.make_border_connected_transparent(img)
+        assert background == (0, 0, 0)
+        assert out[0, 0, 3] == 0
+        assert out[3, 3, 3] == 255
+
+    def test_border_connected_transparency_accepts_manual_color(self):
+        img = np.full((6, 6, 3), [180, 20, 30], dtype=np.uint8)
+        img[0:3, 0] = [10, 80, 190]
+        img[1, 1] = [10, 80, 190]
+        img[4, 4] = [10, 80, 190]
+
+        out, background = color_ops.make_border_connected_transparent(
+            img, tolerance=0, background=(10, 80, 190)
+        )
+
+        assert background == (10, 80, 190)
+        assert out[0, 0, 3] == 0
+        assert out[1, 1, 3] == 0
+        assert out[4, 4, 3] == 255
+        assert out[0, 5, 3] == 255
+
+    def test_speckle_cleanup_removes_only_detached_background_like_islands(self):
+        img = np.full((12, 12, 3), [100, 105, 102], dtype=np.uint8)
+        img[4:9, 3:9] = [190, 70, 35]
+        img[6, 6] = [100, 105, 102]  # interior reuse within the main sprite
+        img[2, 9] = [108, 111, 109]  # detached background-like residue
+        img[1, 1] = [20, 80, 220]  # intentional detached foreground pixel
+
+        transparent, background = color_ops.make_border_connected_transparent(img)
+        cleaned, info = color_ops.remove_background_speckles(
+            transparent, background
+        )
+
+        assert cleaned[2, 9, 3] == 0
+        assert cleaned[6, 6, 3] == 255
+        assert cleaned[1, 1, 3] == 255
+        assert info["removed_cells"] == 1
+        assert info["removed_components"] == 1
+
+    def test_border_connected_transparency_removes_noisy_color_cluster(self):
+        img = np.full((9, 9, 3), (30, 36, 32), dtype=np.uint8)
+        img[::2, ::2] = (38, 43, 39)
+        img[3:6, 3:6] = (210, 80, 30)
+        out, _ = color_ops.make_border_connected_transparent(img)
+        assert np.all(out[0, :, 3] == 0)
+        assert np.all(out[:, 0, 3] == 0)
+        assert np.all(out[3:6, 3:6, 3] == 255)
+
+    def test_crop_transparent_border_reports_original_grid_bounds(self):
+        rgba = np.zeros((10, 12, 4), dtype=np.uint8)
+        rgba[3:7, 4:9] = (120, 80, 30, 255)
+        cropped, bounds = color_ops.crop_transparent_border(rgba, padding=1)
+        assert bounds == (3, 2, 10, 8)
+        assert cropped.shape == (6, 7, 4)
+        assert np.array_equal(cropped, rgba[2:8, 3:10])
+
+    def test_crop_transparent_border_keeps_rgb_canvas(self):
+        rgb = np.zeros((5, 7, 3), dtype=np.uint8)
+        cropped, bounds = color_ops.crop_transparent_border(rgb, padding=3)
+        assert bounds == (0, 0, 7, 5)
+        assert np.array_equal(cropped, rgb)
+
+    def test_crop_padding_is_guaranteed_past_original_edges(self):
+        rgba = np.zeros((4, 5, 4), dtype=np.uint8)
+        rgba[0:3, 1:5] = (80, 140, 200, 255)  # opaque at top and right edges
+        cropped, bounds = color_ops.crop_transparent_border(rgba, padding=1)
+        assert bounds == (0, -1, 6, 4)
+        assert cropped.shape == (5, 6, 4)
+        assert np.all(cropped[0, :, 3] == 0)
+        assert np.all(cropped[:, -1, 3] == 0)
+        assert np.all(cropped[-1, :, 3] == 0)
+
     def test_quantize_image_reduces_palette(self):
         rng = np.random.default_rng(3)
         img = rng.integers(0, 256, size=(32, 32, 3), dtype=np.uint8)
@@ -326,6 +442,93 @@ class TestReconstructorEndToEnd:
         assert rec.cell_size == 10
         assert out.shape == art.shape
 
+    def test_flat_background_sprite_keeps_fine_pitch(self):
+        # Sprites on flat backgrounds used to crown giant cells: at the true
+        # pitch most neighbor pairs are identical background (contrast
+        # diluted to ~0), while a handful of giant cells straddling subject
+        # and background scored huge contrast. The statistical-support
+        # weight in the quality scores prevents that.
+        rng = np.random.default_rng(3)
+        art = make_flat_bg_art()
+        img = upscale(art, 16).astype(np.float64)
+        img = np.clip(img + rng.normal(0, 5, img.shape), 0, 255).astype(np.uint8)
+        rec = PixelArtReconstructor(image=img)
+        out = rec.run("global")
+        assert rec.cell_size <= 32, f"giant pitch {rec.cell_size} won"
+        assert out.shape[0] >= 32, "output collapsed to a handful of cells"
+        assert not rec.last_metrics.get("no_grid", False)
+
+    def test_score_prefers_fine_pitch_over_giant_cells(self):
+        rng = np.random.default_rng(3)
+        art = make_flat_bg_art()
+        img = upscale(art, 16).astype(np.float64)
+        img = np.clip(img + rng.normal(0, 5, img.shape), 0, 255).astype(np.uint8)
+        fine = grid_ops.grid_quality_score(img, 16, (0, 0))
+        giant = grid_ops.grid_quality_score(img, 176, (0, 0))
+        assert fine > giant
+
+    def test_mesh_score_prefers_fine_pitch_over_giant_cells(self):
+        rng = np.random.default_rng(3)
+        art = make_flat_bg_art()
+        img = upscale(art, 16).astype(np.float64)
+        img = np.clip(img + rng.normal(0, 5, img.shape), 0, 255).astype(np.uint8)
+        n = img.shape[0]
+        fine_mesh = (
+            np.arange(0, n + 1, 16, dtype=float),
+            np.arange(0, n + 1, 16, dtype=float),
+        )
+        giant_mesh = (
+            np.arange(0, n + 1, 176, dtype=float),
+            np.arange(0, n + 1, 176, dtype=float),
+        )
+        fine = mesh_ops.mesh_quality_score(img, fine_mesh)
+        giant = mesh_ops.mesh_quality_score(img, giant_mesh)
+        assert fine > giant
+
+    def test_downsample_mode_banded_when_cells_exceed_budget(self, monkeypatch):
+        # When cell count alone blows the bincount budget, downsample_mode
+        # must band the computation instead of re-quantizing forever
+        # (used to recurse infinitely / exhaust memory on fine-pitched or
+        # huge images).
+        art = make_art(grid=24)
+        img = grid_ops.upscale_nn(art, 4)
+        labels, palette = grid_ops.label_image(img)
+        expected = grid_ops.downsample_mode(labels, palette, 4, (0, 0))
+        monkeypatch.setattr(grid_ops, "MAX_BINCOUNT_CELLS", 64)
+        banded = grid_ops.downsample_mode(labels, palette, 4, (0, 0))
+        assert np.array_equal(banded, expected)
+
+    def test_unsharp_prepass_recovers_blurred_grid(self):
+        import cv2
+
+        art = make_art()
+        img = cv2.GaussianBlur(upscale(art, 10), (5, 5), 2.0)
+        sharpened = unsharp_prepass(img)
+        rec = PixelArtReconstructor(image=sharpened)
+        out = rec.run("global")
+        assert rec.cell_size == 10
+        assert out.shape == art.shape
+
+    def test_unsharp_prepass_preserves_alpha_and_shape(self):
+        art = make_art()
+        rgba = np.dstack([art, np.full(art.shape[:2], 77, dtype=np.uint8)])
+        out = unsharp_prepass(rgba)
+        assert out.shape == rgba.shape
+        assert np.array_equal(out[:, :, 3], rgba[:, :, 3])
+
+    def test_noisy_source_warnings_use_tolerant_diff(self):
+        # Noise makes the strict exact-color diff ~100% even when the grid is
+        # perfectly aligned; warnings must reflect the tolerant diff instead.
+        rng = np.random.default_rng(11)
+        art = make_art()
+        img = upscale(art, 10).astype(np.float64)
+        img = np.clip(img + rng.normal(0, 5, img.shape), 0, 255).astype(np.uint8)
+        rec = PixelArtReconstructor(image=img)
+        rec.run("global")
+        metrics = rec.last_metrics
+        assert metrics["percent_diff_core_tolerant"] < 5.0
+        assert not any("Core mismatch" in w for w in metrics["warnings"])
+
     def test_metrics_contract(self):
         rec = PixelArtReconstructor(image=upscale(make_art(), 8))
         rec.run("global")
@@ -376,6 +579,72 @@ class TestReconstructorEndToEnd:
         rec = PixelArtReconstructor(image=img)
         out = rec.run("global")
         assert out.ndim == 3
+
+
+class TestPeakinessGate:
+    """Selection under flat vs peaked score curves (wild-corpus fix).
+
+    On dense fine-pitched art the quality score is nearly flat across
+    pitches, so the argmax (and the largest-within-a-whisker harmonic
+    tie-break) lands on an arbitrary coarse size that destroys the art.
+    The gate detects the flat curve and prefers the finest decent pitch;
+    fine sizes 3-8 are always proposed so that end of the range competes.
+    """
+
+    @staticmethod
+    def _mixed_pitch_image() -> np.ndarray:
+        """Two pitches side by side + noise/blur: flat multi-pitch evidence."""
+        import cv2
+
+        rng = np.random.default_rng(7)
+        palette = rng.integers(0, 256, size=(12, 3), dtype=np.uint8)
+
+        def art(pitch: int, n: int = 480, seed: int = 1) -> np.ndarray:
+            r = np.random.default_rng(seed)
+            g = n // pitch + 1
+            a = palette[r.integers(0, 12, size=(g, g))]
+            return np.repeat(np.repeat(a, pitch, 0), pitch, 1)[:n, :n]
+
+        img = np.concatenate([art(6, seed=2), art(14, seed=3)], axis=1)
+        img = img.astype(np.float64)
+        img += np.random.default_rng(4).normal(0, 6, img.shape)
+        return cv2.GaussianBlur(
+            np.clip(img, 0, 255).astype(np.uint8), (3, 3), 1.2
+        )
+
+    def test_fine_pitches_always_proposed(self):
+        # Coarse blocky art: no detector proposes anything below 16, so the
+        # fine end of the range must be injected to compete at all.
+        rng = np.random.default_rng(3)
+        art = make_art(grid=8, colors=6, seed=3)
+        img = upscale(art, 32).astype(np.float64)
+        img = np.clip(img + rng.normal(0, 2, img.shape), 0, 255).astype(np.uint8)
+        rec = PixelArtReconstructor(image=img)
+        rec.run("global")
+        proposed = {c["size"] for c in rec.last_fit_debug["candidates"]}
+        assert set(range(3, 9)) <= proposed
+
+    def test_flat_evidence_prefers_fine_pitch(self):
+        rec = PixelArtReconstructor(image=self._mixed_pitch_image())
+        rec.run("global")
+        assert rec.last_fit_debug["peaked"] is False
+        assert rec.cell_size <= 8, (
+            f"flat evidence must err fine, picked {rec.cell_size}"
+        )
+        assert not rec.last_metrics.get("no_grid", False)
+
+    def test_clean_subdivision_does_not_outvote_native(self):
+        # 8x8 art upscaled x32: cells of 8 subdivide the uniform 32-blocks
+        # with near-zero variance and an inflated score. The native 32 must
+        # still win (fine sizes are a safety net, not a harmonic shortcut).
+        rng = np.random.default_rng(3)
+        art = make_art(grid=8, colors=6, seed=3)
+        img = upscale(art, 32).astype(np.float64)
+        img = np.clip(img + rng.normal(0, 2, img.shape), 0, 255).astype(np.uint8)
+        rec = PixelArtReconstructor(image=img)
+        rec.run("global")
+        assert rec.cell_size == 32
+        assert rec.last_fit_debug["peaked"] is True
 
     def test_requires_an_image(self):
         with pytest.raises(ValueError):

@@ -91,6 +91,78 @@ def cell_margin(cell: int) -> int:
     return max(1, min(cell // 6, (cell - 1) // 2))
 
 
+def cell_vote_table(
+    labels: np.ndarray,
+    palette: np.ndarray,
+    cell: int,
+    offset: Tuple[int, int],
+    row: int,
+    column: int,
+    trim_margin: bool = True,
+) -> dict:
+    """Return the modal-vote candidates for one reconstruction cell.
+
+    The inspected pixels and trimming rule are exactly those used by
+    :func:`downsample_mode`.  The result is deliberately JSON-friendly so
+    browser tools can capture the decision context without reimplementing
+    reconstruction. Candidates are sorted by vote count, then palette label.
+
+    This function is introspection-only: it does not mutate labels, palette,
+    or any reconstruction state.
+    """
+    cell = int(cell)
+    view = _cell_view(labels, cell, offset)
+    gh, gw = int(view.shape[0]), int(view.shape[2])
+    row, column = int(row), int(column)
+    if not (0 <= row < gh and 0 <= column < gw):
+        raise IndexError(
+            f"cell ({row}, {column}) outside reconstruction {gh}x{gw}"
+        )
+
+    margin = cell_margin(cell) if trim_margin else 0
+    if margin and cell - 2 * margin >= 1:
+        pixels = view[
+            row, margin : cell - margin,
+            column, margin : cell - margin,
+        ]
+    else:
+        margin = 0
+        pixels = view[row, :, column, :]
+
+    # np.intp is required by np.bincount on wasm32/Pyodide.
+    counts = np.bincount(
+        pixels.reshape(-1).astype(np.intp, copy=False),
+        minlength=len(palette),
+    )
+    used = np.flatnonzero(counts)
+    ordered = sorted(used.tolist(), key=lambda label: (-counts[label], label))
+    total = int(counts.sum())
+    ox, oy = (int(offset[0]), int(offset[1]))
+    x0, y0 = ox + column * cell, oy + row * cell
+    candidates = [
+        {
+            "label": int(label),
+            "color": [int(channel) for channel in palette[label, :3]],
+            "count": int(counts[label]),
+            "share": float(counts[label] / total) if total else 0.0,
+        }
+        for label in ordered
+    ]
+    return {
+        "row": row,
+        "column": column,
+        "source_bounds": [x0, y0, x0 + cell, y0 + cell],
+        "margin": margin,
+        "total": total,
+        "winner": candidates[0]["label"] if candidates else None,
+        "vote_margin": (
+            candidates[0]["share"]
+            - (candidates[1]["share"] if len(candidates) > 1 else 0.0)
+        ) if candidates else 0.0,
+        "candidates": candidates,
+    }
+
+
 def downsample_mode(
     labels: np.ndarray,
     palette: np.ndarray,
@@ -114,11 +186,33 @@ def downsample_mode(
     cells = view.transpose(0, 2, 1, 3).reshape(gh * gw, -1)
 
     if gh * gw * num_colors > MAX_BINCOUNT_CELLS:
-        # Palette too large for the bincount table: re-quantize to 256.
-        small_labels, small_palette = _requantize(labels, palette, 256)
-        return downsample_mode(small_labels, small_palette, cell, offset, trim_margin)
+        if num_colors > 256:
+            # Palette too large for the bincount table: re-quantize to 256.
+            # (Recurse at most once - the next call lands in the banded
+            # branch below. Recursing unconditionally used to loop forever
+            # when the CELL count alone blew the budget, exhausting stack
+            # or memory on huge/fine-pitched images.)
+            small_labels, small_palette = _requantize(labels, palette, 256)
+            return downsample_mode(
+                small_labels, small_palette, cell, offset, trim_margin
+            )
+        # Palette already small: bincount in bands of cell rows so the
+        # table stays within budget regardless of image size.
+        band = max(1, MAX_BINCOUNT_CELLS // (gw * num_colors))
+        out = np.empty((gh, gw, 3), dtype=palette.dtype)
+        for y0 in range(0, gh, band):
+            y1 = min(gh, y0 + band)
+            sub = cells[y0 * gw : y1 * gw]
+            n = sub.shape[0]
+            ids = sub + np.arange(n, dtype=np.intp)[:, None] * num_colors
+            counts = np.bincount(ids.ravel(), minlength=n * num_colors)
+            modes = counts.reshape(n, num_colors).argmax(axis=1)
+            out[y0:y1] = palette[modes].reshape(y1 - y0, gw, 3)
+        return out
 
-    ids = cells + np.arange(gh * gw, dtype=np.int64)[:, None] * num_colors
+    # np.intp keeps bincount happy on 32-bit targets (Pyodide/wasm32); the
+    # MAX_BINCOUNT_CELLS budget above guarantees ids fit.
+    ids = cells + np.arange(gh * gw, dtype=np.intp)[:, None] * num_colors
     counts = np.bincount(ids.ravel(), minlength=gh * gw * num_colors)
     modes = counts.reshape(gh * gw, num_colors).argmax(axis=1)
     return palette[modes].reshape(gh, gw, 3)
@@ -163,11 +257,20 @@ def grid_quality_score(
 
     h_diff = np.abs(means[:, :-1] - means[:, 1:]).sum(axis=-1)
     v_diff = np.abs(means[:-1, :] - means[1:, :]).sum(axis=-1)
-    inter = float(np.mean(np.concatenate([h_diff.ravel(), v_diff.ravel()])))
+    pairs = np.concatenate([h_diff.ravel(), v_diff.ravel()])
+    inter = float(pairs.mean())
+
+    # Statistical support: a contrast mean over a handful of giant cells is
+    # not comparable to one over thousands of fine-pitch pairs. Without it,
+    # sprites on flat backgrounds crown huge cells (every pair straddles
+    # subject and background) over the true pitch, whose mean contrast is
+    # diluted by identical background neighbors. Negligible above ~2000
+    # pairs, strong below ~200.
+    support = float(np.sqrt(pairs.size / (pairs.size + 400.0)))
 
     if intra < 0.1:
-        return inter * 100.0
-    return inter / float(np.sqrt(intra))
+        return inter * 100.0 * support
+    return inter / float(np.sqrt(intra)) * support
 
 
 def intra_cell_variance(

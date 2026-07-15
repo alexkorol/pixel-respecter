@@ -28,9 +28,13 @@ from typing import Callable, Iterable, List, Optional, Sequence
 
 from PIL import Image
 
+from . import colors as color_ops
+from . import palettes
+from . import sheets
 from .reconstructor import (
     PixelArtReconstructor,
     build_validation_diagnostics,
+    unsharp_prepass,
     _evaluate_with_parameters,
 )
 
@@ -53,6 +57,11 @@ class BatchConfig:
     save_overlays: bool
     grid_debug_dir: Optional[Path]
     metrics_path: Optional[Path]
+    palette: Optional[str] = None
+    max_colors: Optional[int] = None
+    transparent_bg: bool = False
+    split_frames: bool = False
+    sharpen: bool = False
 
 
 def _gather_images(sources: Sequence[Path], recursive: bool) -> List[Path]:
@@ -116,7 +125,16 @@ def _process_single_image(
 ) -> Optional[dict]:
     """Run the reconstruction pipeline for one image and persist artefacts."""
     try:
-        reconstructor = PixelArtReconstructor(str(image_path), debug=cfg.debug)
+        if cfg.sharpen:
+            import numpy as np
+
+            with Image.open(image_path) as im:
+                source = np.array(im.convert("RGB"))
+            reconstructor = PixelArtReconstructor(
+                image=unsharp_prepass(source), debug=cfg.debug
+            )
+        else:
+            reconstructor = PixelArtReconstructor(str(image_path), debug=cfg.debug)
         reconstructor.use_hough = cfg.use_hough
         reconstructor.initial_upscale = cfg.initial_upscale
         result = reconstructor.run(mode=cfg.mode)
@@ -177,8 +195,27 @@ def _process_single_image(
     metrics = best["metrics"]
     reconstructor = best["reconstructor"]
 
-    output_path = cfg.output_dir / f"{image_path.stem}_reconstructed{image_path.suffix}"
+    # Palette constraints are a stylization of the final asset; diagnostics
+    # above keep judging the raw reconstruction against the source.
+    result = palettes.apply_palette_options(result, cfg.palette, cfg.max_colors)
+
+    suffix = image_path.suffix
+    if cfg.transparent_bg:
+        result = color_ops.make_background_transparent(result)
+        suffix = ".png"  # alpha needs a format that keeps it
+
+    output_path = cfg.output_dir / f"{image_path.stem}_reconstructed{suffix}"
     Image.fromarray(result).save(output_path)
+
+    if cfg.split_frames:
+        # One reconstruction covers the whole sheet, so every frame shares
+        # the same grid, pitch, and palette by construction.
+        boxes = sheets.split_frames(result)
+        frames_dir = cfg.output_dir / f"{image_path.stem}_frames"
+        frames_dir.mkdir(parents=True, exist_ok=True)
+        for i, frame in enumerate(sheets.crop_frames(result, boxes)):
+            Image.fromarray(frame).save(frames_dir / f"frame_{i:02d}.png")
+        print(f"[INFO] {image_path.name}: {len(boxes)} frame(s) -> {frames_dir}")
 
     overlay_path: Optional[Path] = None
     if cfg.save_overlays and overlay is not None:
@@ -194,8 +231,11 @@ def _process_single_image(
     if warnings:
         print(f"[WARN] {image_path.name}: {' | '.join(warnings)}")
     else:
-        summary = metrics.get("percent_diff", metrics.get("percent_diff_total", 0.0))
-        print(f"[OK] {image_path.name}: diff={summary:.2f}%")
+        summary = metrics.get(
+            "percent_diff_core_tolerant",
+            metrics.get("percent_diff", metrics.get("percent_diff_total", 0.0)),
+        )
+        print(f"[OK] {image_path.name}: tolerant core diff={summary:.2f}%")
 
     record = {
         "image": image_path.name,
@@ -313,6 +353,35 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         help="Custom directory for grid debug plots.",
     )
     parser.add_argument(
+        "--palette",
+        choices=sorted(palettes.PALETTES) + ["none"],
+        default="none",
+        help="Snap the reconstructed art to a fixed palette (CIELAB nearest).",
+    )
+    parser.add_argument(
+        "--max-colors",
+        type=int,
+        help="Reduce the reconstructed art to at most N colors (no dithering).",
+    )
+    parser.add_argument(
+        "--transparent-bg",
+        action="store_true",
+        help="Make the dominant border color transparent; output becomes PNG.",
+    )
+    parser.add_argument(
+        "--split-frames",
+        action="store_true",
+        help="Treat the image as a sprite sheet: also export each frame of "
+             "the shared-grid reconstruction as <stem>_frames/frame_NN.png.",
+    )
+    parser.add_argument(
+        "--sharpen",
+        action="store_true",
+        help="Unsharp-mask the source before reconstruction. Recovers cell "
+             "detail on softly rendered / bloom-heavy sources; avoid on "
+             "already-crisp input (amplifies noise).",
+    )
+    parser.add_argument(
         "--recursive",
         action="store_true",
         help="When inputs include directories, walk them recursively.",
@@ -375,6 +444,11 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         save_overlays=not args.skip_overlays,
         grid_debug_dir=grid_debug_dir,
         metrics_path=metrics_path,
+        palette=None if args.palette == "none" else args.palette,
+        max_colors=args.max_colors,
+        transparent_bg=args.transparent_bg,
+        split_frames=args.split_frames,
+        sharpen=args.sharpen,
     )
 
     suggest_fn = _load_ml_suggester(cfg.use_ml)

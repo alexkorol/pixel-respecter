@@ -1,0 +1,222 @@
+[
+  {
+    "id": "117d33feec4964d0",
+    "file": "images/117d33feec4964d0.png",
+    "original_name": "civitai_112370050.png",
+    "width": 1792,
+    "height": 2304,
+    "source": "civitai",
+    "reason": "smooth vector illustration, no pixel grid",
+    "excluded": "2026-07-10 strict domain re-curation"
+  },
+  {
+    "id": "1378f3089928802b",
+    "file": "images/1378f3089928802b.png",
+    "original_name": "civitai_111929322.png",
+    "width": 1024,
+    "height": 1024,
+    "source": "civitai",
+    "reason": "photographic apartment scene",
+    "excluded": "2026-07-10 strict domain re-curation"
+  },
+  {
+    "id": "2caccf352c58eafe",
+    "file": "images/2caccf352c58eafe.png",
+    "original_name": "civitai_104069744.png",
+    "width": 880,
+    "height": 1040,
+    "source": "civitai",
+    "reason": "flat vector illustration, no pixel grid",
+    "excluded": "2026-07-10 strict domain re-curation"
+  },
+  {
+    "id": "3033b4b17710b7dd",
+    "file": "images/3033b4b17710b7dd.png",
+    "original_name": "civitai_112269917.png",
+    "width": 1024,
+    "height": 1520,
+    "source": "civitai",
+    "reason": "3D-rendered lobby interior",
+    "excluded": "2026-07-10 strict domain re-curation"
+  },
+  {
+    "id": "446126b75dc3cd76",
+    "file": "images/446126b75dc3cd76.png",
+    "original_name": "civitai_60755292.png",
+    "width": 768,
+    "height": 512,
+    "source": "civitai",
+    "reason": "soft-rendered snow cabin",
+    "excluded": "2026-07-10 strict domain re-curation"
+  },
+  {
+    "id": "4b33f7e307828452",
+    "file": "images/4b33f7e307828452.png",
+    "original_name": "civitai_61085323.png",
+    "width": 512,
+    "height": 512,
+    "source": "civitai",
+    "reason": "soft 3D robot render",
+    "excluded": "2026-07-10 strict domain re-curation"
+  },
+  {
+    "id": "4e2dfb0c4c91ab24",
+    "file": "images/4e2dfb0c4c91ab24.png",
+    "original_name": "civitai_61085324.png",
+    "width": 512,
+    "height": 512,
+    "source": "civitai",
+    "reason": "soft 3D vehicle render",
+    "excluded": "2026-07-10 strict domain re-curation"
+  },
+  {
+    "id": "4fae1942eb91826d",
+    "file": "images/4fae1942eb91826d.png",
+    "original_name": "civitai_92121193.png",
+    "width": 768,
+    "height": 512,
+    "source": "civitai",
+    "reason": "soft painting, no pixel grid",
+    "excluded": "2026-07-10 strict domain re-curation"
+  },
+  {
+    "id": "57c706163455a190",
+    "file": "images/57c706163455a190.png",
+    "original_name": "civitai_77906595.png",
+    "width": 512,
+    "height": 512,
+    "source": "civitai",
+    "reason": "photographic bedroom render",
+    "excluded": "2026-07-10 strict domain re-curation"
+  },
+  {
+    "id": "5ae25ebd33b8c497",
+    "file": "images/5ae25ebd33b8c497.png",
+    "original_name": "civitai_60673887.png",
+    "width": 512,
+    "height": 768,
+    "source": "civitai",
+    "reason": "soft painting, no pixel grid",
+    "excluded": "2026-07-10 strict domain re-curation"
+  },
+  {
+    "id": "684b1f537e111d51",
+    "file": "images/684b1f537e111d51.png",
+    "original_name": "civitai_61085331.png",
+    "width": 512,
+    "height": 512,
+    "source": "civitai",
+    "reason": "soft 3D robot render",
+    "excluded": "2026-07-10 strict domain re-curation"
+  },
+  {
+    "id": "6b39b7153e047460",
+    "file": "images/6b39b7153e047460.png",
+    "original_name": "civitai_112372040.png",
+    "width": 1792,
+    "height": 2304,
+    "source": "civitai",
+    "reason": "photographic moon scene",
+    "excluded": "2026-07-10 strict domain re-curation"
+  },
+  {
+    "id": "7f2495aeb23a0dc0",
+    "file": "images/7f2495aeb23a0dc0.png",
+    "original_name": "civitai_111929477.png",
+    "width": 1024,
+    "height": 1024,
+    "source": "civitai",
+    "reason": "soft painterly desert scene",
+    "excluded": "2026-07-10 strict domain re-curation"
+  },
+  {
+    "id": "8669bf98c82706a3",
+    "file": "images/8669bf98c82706a3.png",
+    "original_name": "civitai_40500374.png",
+    "width": 512,
+    "height": 768,
+    "source": "civitai",
+    "reason": "soft painterly corridor",
+    "excluded": "2026-07-10 strict domain re-curation"
+  },
+  {
+    "id": "93288ecad2cb4165",
+    "file": "images/93288ecad2cb4165.png",
+    "original_name": "civitai_61085329.png",
+    "width": 768,
+    "height": 768,
+    "source": "civitai",
+    "reason": "soft 3D robot render",
+    "excluded": "2026-07-10 strict domain re-curation"
+  },
+  {
+    "id": "c6a782a0331647d5",
+    "file": "images/c6a782a0331647d5.png",
+    "original_name": "civitai_61085326.png",
+    "width": 512,
+    "height": 512,
+    "source": "civitai",
+    "reason": "soft 3D robot render",
+    "excluded": "2026-07-10 strict domain re-curation"
+  },
+  {
+    "id": "d0af2fdf072aa73b",
+    "file": "images/d0af2fdf072aa73b.png",
+    "original_name": "civitai_127777525.png",
+    "width": 1024,
+    "height": 1024,
+    "source": "civitai",
+    "reason": "smooth digital painting, no pixel grid",
+    "excluded": "2026-07-10 strict domain re-curation"
+  },
+  {
+    "id": "22b28f4866e01d33",
+    "file": "images/22b28f4866e01d33.png",
+    "original_name": "civitai_112366534.png",
+    "width": 1792,
+    "height": 2304,
+    "source": "civitai",
+    "reason": "user review: not a pixel-art imitation",
+    "excluded": "2026-07-10 user bench review"
+  },
+  {
+    "id": "73a011aa4aef22de",
+    "file": "images/73a011aa4aef22de.png",
+    "original_name": "civitai_116142610.png",
+    "width": 1824,
+    "height": 1248,
+    "source": "civitai",
+    "reason": "user review: not a pixel-art imitation",
+    "excluded": "2026-07-10 user bench review"
+  },
+  {
+    "id": "a74e14a4ee337052",
+    "file": "images/a74e14a4ee337052.png",
+    "original_name": "civitai_111928981.png",
+    "width": 1024,
+    "height": 1024,
+    "source": "civitai",
+    "reason": "user review: not a pixel-art imitation",
+    "excluded": "2026-07-10 user bench review"
+  },
+  {
+    "id": "aa773562c122067b",
+    "file": "images/aa773562c122067b.png",
+    "original_name": "civitai_122976314.png",
+    "width": 832,
+    "height": 1216,
+    "source": "civitai",
+    "reason": "user review: not a pixel-art imitation",
+    "excluded": "2026-07-10 user bench review"
+  },
+  {
+    "id": "dffaeb33d2f330fe",
+    "file": "images/dffaeb33d2f330fe.png",
+    "original_name": "civitai_123535365.png",
+    "width": 1216,
+    "height": 960,
+    "source": "civitai",
+    "reason": "user review: not a pixel-art imitation",
+    "excluded": "2026-07-10 user bench review"
+  }
+]
